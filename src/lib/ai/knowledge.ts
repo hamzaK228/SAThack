@@ -5,15 +5,25 @@ export type KnowledgeChunk = { book: string; page: number; chunk: number; text: 
 
 let cache: KnowledgeChunk[] | null = null;
 
+/**
+ * The corpus files sit at the project root (see outputFileTracingIncludes in
+ * next.config.ts). Every read keeps its path as an inline literal — a computed
+ * path in the argument of readFileSync makes Turbopack trace the *entire
+ * project* into the serverless bundle ("Dynamic filesystem access causes
+ * tracing of the whole project"). Add a new corpus by adding a thunk here.
+ */
+const CORPUS_FILES = [
+  () => readFileSync(path.join(process.cwd(), "sat-corpus.json"), "utf-8"),
+  () => readFileSync(path.join(process.cwd(), "sat-corpus-official.json"), "utf-8"),
+];
+
 /** Load the SAT book corpus (built by scripts/extract_books.py + ocr_official.py). */
 export function loadCorpus(): KnowledgeChunk[] {
   if (cache) return cache;
-  const files = ["sat-corpus.json", "sat-corpus-official.json"];
   const chunks: KnowledgeChunk[] = [];
-  for (const f of files) {
+  for (const read of CORPUS_FILES) {
     try {
-      const p = path.join(process.cwd(), f);
-      chunks.push(...(JSON.parse(readFileSync(p, "utf-8")) as KnowledgeChunk[]));
+      chunks.push(...(JSON.parse(read()) as KnowledgeChunk[]));
     } catch {
       // file missing — ignore
     }
