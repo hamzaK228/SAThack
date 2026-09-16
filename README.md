@@ -34,8 +34,8 @@ the leaderboard shows a setup note. Your own XP/level/badges need no migration.
 
 ## Seeding content
 
-Large source files (question banks, corpora, PDFs) are gitignored — regenerate
-them locally:
+Large source files (the question-bank JSON/SQL seeds and the source PDFs) are
+gitignored — regenerate them locally:
 
 ```bash
 python3 scripts/extract_questions.py    # PDFs  -> question-bank.json

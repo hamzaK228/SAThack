@@ -50,10 +50,14 @@ vocab-seed.sql
 question-bank.json
 question-bank.json.part.jsonl
 active-questions.json
-sat-corpus.json
-sat-corpus-official.json
 vocab.json
 Practise tests/
 question banks/
 Resoure for study/
 Vocabulary/
+
+# NOTE: sat-corpus.json and sat-corpus-official.json are deliberately tracked.
+# src/lib/ai/knowledge.ts reads them from disk at runtime (the book-retrieval
+# fallback used when no SAT_AI_API_KEY is set) and next.config.ts traces them
+# into the serverless bundle via outputFileTracingIncludes. See the matching
+# note in .vercelignore.
