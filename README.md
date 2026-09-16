@@ -78,6 +78,3 @@ rate-limited and not for production traffic. Set
 | `npm run dev` | Dev server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint |
-
-# SAThack
-# SAThack
