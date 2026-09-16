@@ -1,0 +1,30 @@
+# Dependencies & build output (also auto-ignored by Vercel)
+node_modules
+.next
+.vercel
+.git
+
+# Local environment files — set these in the Vercel dashboard instead
+.env*
+!.env.local.example
+
+# Supabase-only migrations (run these in the Supabase SQL editor, not Vercel)
+migrations
+
+# Large seed / regenerable artifacts — not needed at runtime
+question-bank-seed.sql
+vocab-seed.sql
+question-bank.json
+question-bank.json.part.jsonl
+active-questions.json
+vocab.json
+
+# Local study-material folders (PDFs)
+Practise tests/
+question banks/
+Resoure for study/
+Vocabulary/
+
+# NOTE: sat-corpus.json and sat-corpus-official.json are deliberately NOT
+# ignored — they are read at runtime by src/lib/ai/knowledge.ts (the book-
+# retrieval fallback) and traced into the serverless bundle via next.config.ts.
