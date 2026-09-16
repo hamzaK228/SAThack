@@ -63,10 +63,10 @@ export default function Hero() {
 
           <h1 className="hero-title">
             <span className="line">
-              <Words text="Stop retaking the SAT blind." baseDelay={0.06} />
+              <Words text="The SAT is a system." baseDelay={0.06} />
             </span>
             <span className="line grad">
-              <Words text="Read the system. Ace it." baseDelay={0.34} />
+              <Words text="Every system has a hack. Find yours." baseDelay={0.34} />
             </span>
           </h1>
 
