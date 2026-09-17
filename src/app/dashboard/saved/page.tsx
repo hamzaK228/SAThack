@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import MathText from "@/components/MathText";
+import QuestionText from "@/components/QuestionText";
 import UnsaveButton from "@/components/dashboard/UnsaveButton";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,9 @@ export default async function SavedPage() {
   const { data: qs } = qids.length
     ? await supabase
         .from("questions")
-        .select("id, question_text, domain, difficulty, correct_answer, explanation")
+        .select(
+          "id, question_text, question_text_html, domain, difficulty, correct_answer, explanation"
+        )
         .in("id", qids)
     : { data: null };
 
@@ -53,7 +56,7 @@ export default async function SavedPage() {
                   <UnsaveButton questionId={q.id} />
                 </div>
                 <div className="saved-question">
-                  <MathText text={q.question_text} />
+                  <QuestionText html={q.question_text_html} text={q.question_text} />
                 </div>
                 <details className="saved-explanation">
                   <summary>Answer &amp; explanation</summary>

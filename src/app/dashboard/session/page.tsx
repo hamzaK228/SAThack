@@ -6,7 +6,7 @@ import { computeStatuses } from "@/lib/question-status";
 export const dynamic = "force-dynamic";
 
 const COLS =
-  "id, section, domain, skill, difficulty, is_grid_in, question_text, passage, choices, correct_answer, explanation";
+  "id, section, domain, skill, difficulty, is_grid_in, question_text, question_text_html, passage, passage_html, choices, correct_answer, explanation";
 
 type Search = {
   domain?: string;

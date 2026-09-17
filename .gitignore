@@ -49,6 +49,7 @@ question-bank-seed.sql
 vocab-seed.sql
 question-bank.json
 question-bank.json.part.jsonl
+question-media.jsonl
 active-questions.json
 vocab.json
 Practise tests/

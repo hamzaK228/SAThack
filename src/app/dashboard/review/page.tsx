@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
-import MathText from "@/components/MathText";
+import QuestionText from "@/components/QuestionText";
 
 export const dynamic = "force-dynamic";
 
@@ -39,12 +39,15 @@ export default async function ReviewPage() {
   }
   const dueIds = [...latest.entries()].filter(([, ok]) => !ok).map(([id]) => id);
 
-  const qmap = new Map<string, { question_text: string; skill: string | null; difficulty: string }>();
+  const qmap = new Map<
+    string,
+    { question_text: string; question_text_html: string | null; skill: string | null; difficulty: string }
+  >();
   for (let i = 0; i < dueIds.length; i += 500) {
     const chunk = dueIds.slice(i, i + 500);
     const { data } = await supabase
       .from("questions")
-      .select("id, question_text, skill, difficulty")
+      .select("id, question_text, question_text_html, skill, difficulty")
       .in("id", chunk);
     for (const q of data ?? []) qmap.set(q.id, q);
   }
@@ -59,6 +62,7 @@ export default async function ReviewPage() {
       skill: q?.skill?.trim() ?? null,
       difficulty: q?.difficulty ?? null,
       question_text: q?.question_text ?? "",
+      question_text_html: q?.question_text_html ?? null,
     };
   });
 
@@ -87,7 +91,7 @@ export default async function ReviewPage() {
                 </Link>
               </div>
               <div className="qb-question">
-                <MathText text={q.question_text} />
+                <QuestionText html={q.question_text_html} text={q.question_text} />
               </div>
             </li>
           ))}

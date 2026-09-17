@@ -27,6 +27,8 @@ import unicodedata
 import urllib.request
 import xml.etree.ElementTree as ET
 
+from rich_html import sanitize_rich
+
 BASE = "https://qbank-api.collegeboard.org/msreportingquestionbank-prod/questionbank"
 GET_QUESTIONS = BASE + "/digital/get-questions"
 GET_QUESTION = BASE + "/digital/get-question"
@@ -250,6 +252,11 @@ def build_question(meta: dict, detail: dict, section: str) -> dict:
     q_type = detail.get("type")
     stem = clean_latex_text(detail.get("stem", ""))
     stimulus = clean_latex_text(detail.get("stimulus", "")) or None
+    # The plain-text columns above lose every graph/table the question carries;
+    # these keep a sanitized copy of the markup (see rich_html.py). NULL when
+    # plain text already says everything, which is most questions.
+    stem_html = sanitize_rich(convert_math_in_html(detail.get("stem", "")))
+    stimulus_html = sanitize_rich(convert_math_in_html(detail.get("stimulus", "")))
 
     choices = None
     if q_type == "mcq":
@@ -257,10 +264,15 @@ def build_question(meta: dict, detail: dict, section: str) -> dict:
         options = detail.get("answerOptions") or []
         choices = []
         for i, opt in enumerate(options):
-            choices.append({
+            content = opt.get("content", "")
+            choice_html = sanitize_rich(convert_math_in_html(content))
+            entry = {
                 "label": letters[i] if i < len(letters) else str(i + 1),
-                "text": clean_latex_text(opt.get("content", "")),
-            })
+                "text": clean_latex_text(content),
+            }
+            if choice_html:
+                entry["html"] = choice_html
+            choices.append(entry)
 
     accepted = [a for a in (detail.get("correct_answer") or detail.get("keys") or []) if a is not None]
     answer = None
@@ -286,7 +298,9 @@ def build_question(meta: dict, detail: dict, section: str) -> dict:
         "score_band": meta.get("score_band_range_cd"),
         "type": "multiple_choice" if q_type == "mcq" else "grid_in",
         "stem": stem,
+        "stem_html": stem_html,
         "stimulus": stimulus,
+        "stimulus_html": stimulus_html,
         "choices": choices,
         "answer": answer,
         "accepted_answers": accepted_norm,

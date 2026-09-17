@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import MathText from "@/components/MathText";
+import QuestionText from "@/components/QuestionText";
 import ReferenceSheet from "./ReferenceSheet";
 import DesmosCalculator from "./DesmosCalculator";
 import Tutor from "./Tutor";
 import { recordAttempt, toggleSave } from "@/app/dashboard/actions";
 
-type Choice = { label: string; text: string };
+type Choice = { label: string; text: string; html?: string | null };
 type Question = {
   id: string;
   section: string;
@@ -16,7 +17,9 @@ type Question = {
   difficulty: string;
   is_grid_in: boolean;
   question_text: string;
+  question_text_html?: string | null;
   passage: string | null;
+  passage_html?: string | null;
   choices: Choice[] | null;
   correct_answer: string;
   explanation: string | null;
@@ -106,7 +109,7 @@ export default function StudySession({ questions }: { questions: Question[] }) {
           >
             <span className="session-choice-label">{c.label}</span>
             <span className="session-choice-text">
-              <MathText text={c.text} />
+              <QuestionText html={c.html} text={c.text} />
             </span>
           </button>
         );
@@ -244,12 +247,12 @@ export default function StudySession({ questions }: { questions: Question[] }) {
               onClick={onPassageClick}
             >
               <span className="session-pane-label">Passage</span>
-              <MathText text={q.passage} />
+              <QuestionText html={q.passage_html} text={q.passage} />
             </div>
             <div className="session-divider" role="separator" aria-hidden="true" />
             <div className="session-question-pane">
               <div className="session-question">
-                <MathText text={q.question_text} />
+                <QuestionText html={q.question_text_html} text={q.question_text} />
               </div>
               {answerBlock}
               {feedbackBlock}
@@ -264,12 +267,12 @@ export default function StudySession({ questions }: { questions: Question[] }) {
                 onMouseUp={onPassageMouseUp}
                 onClick={onPassageClick}
               >
-                <MathText text={q.passage} />
+                <QuestionText html={q.passage_html} text={q.passage} />
               </div>
             )}
 
             <div className="session-question">
-              <MathText text={q.question_text} />
+              <QuestionText html={q.question_text_html} text={q.question_text} />
             </div>
 
             {answerBlock}

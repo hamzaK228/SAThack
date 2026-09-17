@@ -10,12 +10,14 @@ Existing columns (must match):
   difficulty      question_difficulty (easy | medium | hard)
   passage         text               <- stimulus
   question_text   text               <- stem (math as $...$ LaTeX)
-  choices         jsonb              <- [{label, text}]
+  choices         jsonb              <- [{label, text, html?}]
   correct_answer  text               <- answer
   explanation     text               <- rationale
   source_id       text               <- College Board question ID
   is_grid_in      boolean
   is_official     boolean
+  passage_html        text           <- stimulus with graphs/tables (rich_html.py)
+  question_text_html  text           <- stem with graphs/tables
 
 Usage:
   python3 scripts/seed_questions.py question-bank.json --out question-bank-seed.sql
@@ -45,8 +47,9 @@ def main():
     questions = data["questions"]
 
     columns = (
-        "section, domain, skill, difficulty, passage, question_text, choices, "
-        "correct_answer, explanation, source_id, is_grid_in, is_official"
+        "section, domain, skill, difficulty, passage, passage_html, question_text, "
+        "question_text_html, choices, correct_answer, explanation, source_id, "
+        "is_grid_in, is_official"
     )
 
     lines = []
@@ -61,7 +64,8 @@ def main():
         values = (
             f"({sql_str(section)}, {sql_str(q.get('domain'))}, {sql_str(q.get('skill'))}, "
             f"{sql_str(q.get('difficulty'))}, {sql_str(q.get('stimulus'))}, "
-            f"{sql_str(q.get('stem'))}, {sql_str(choices)}, {sql_str(q.get('answer'))}, "
+            f"{sql_str(q.get('stimulus_html'))}, {sql_str(q.get('stem'))}, "
+            f"{sql_str(q.get('stem_html'))}, {sql_str(choices)}, {sql_str(q.get('answer'))}, "
             f"{sql_str(q.get('rationale'))}, {sql_str(q.get('id'))}, "
             f"{'true' if q.get('type') == 'grid_in' else 'false'}, true)"
         )

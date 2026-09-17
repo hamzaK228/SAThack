@@ -5,7 +5,7 @@ import DiagnosticExam from "@/components/dashboard/DiagnosticExam";
 export const dynamic = "force-dynamic";
 
 const COLS =
-  "id, section, domain, skill, difficulty, is_grid_in, question_text, passage, choices, correct_answer";
+  "id, section, domain, skill, difficulty, is_grid_in, question_text, question_text_html, passage, passage_html, choices, correct_answer";
 
 export default async function DiagnosticPage() {
   const supabase = await createClient();

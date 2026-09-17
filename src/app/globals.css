@@ -2248,6 +2248,83 @@ strong {
   font-size: 1.06em;
 }
 
+/* --------------------------------------------------------------------------
+   Rich question content — graphs, tables and figures from the question bank.
+   scripts/rich_html.py stores a sanitized copy of the source markup with its
+   inline styles stripped, so the look is defined here instead.
+   -------------------------------------------------------------------------- */
+.rich {
+  display: block;
+}
+.rich p {
+  margin: 0 0 0.75rem;
+}
+.rich p:last-child {
+  margin-bottom: 0;
+}
+.rich ul,
+.rich ol {
+  margin: 0 0 0.75rem 1.15rem;
+  padding: 0;
+}
+.rich li {
+  margin-bottom: 0.3rem;
+}
+.rich figure {
+  margin: 1rem 0;
+}
+/* The API wraps a table in several nested <figure>s; don't compound the gaps. */
+.rich figure figure,
+.rich figure:first-child {
+  margin: 0;
+}
+.rich svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.rich img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+.rich table {
+  border-collapse: collapse;
+  margin: 0 auto 1rem;
+  max-width: 100%;
+  font-size: 0.94em;
+  font-variant-numeric: tabular-nums;
+}
+.rich caption,
+.rich figcaption {
+  caption-side: top;
+  margin-bottom: 0.6rem;
+  font-size: 0.9em;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: center;
+}
+.rich th,
+.rich td {
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border-bright);
+  text-align: center;
+  vertical-align: middle;
+}
+.rich thead th {
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.03);
+}
+.rich tbody th {
+  text-align: left;
+  font-weight: 700;
+}
+.rich .katex {
+  font-size: 1.06em;
+}
+
 .session-shell {
   display: flex;
   flex-direction: column;

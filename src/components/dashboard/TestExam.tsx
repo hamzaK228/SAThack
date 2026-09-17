@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import MathText from "@/components/MathText";
+import QuestionText from "@/components/QuestionText";
 import ReferenceSheet from "./ReferenceSheet";
 import DesmosCalculator from "./DesmosCalculator";
 import { startTestSession, saveTestProgress, completeTestSession } from "@/app/dashboard/actions";
 
-type Choice = { label: string; text: string };
+type Choice = { label: string; text: string; html?: string | null };
 export type TestQuestion = {
   id: string;
   section: string;
@@ -16,7 +16,9 @@ export type TestQuestion = {
   difficulty: string;
   is_grid_in: boolean;
   question_text: string;
+  question_text_html?: string | null;
   passage: string | null;
+  passage_html?: string | null;
   choices: Choice[] | null;
   correct_answer: string;
   explanation: string | null;
@@ -472,7 +474,7 @@ export default function TestExam({
                   onMouseUp={onPassageMouseUp}
                   onClick={onPassageClick}
                 >
-                  <MathText text={q.passage} />
+                  <QuestionText html={q.passage_html} text={q.passage} />
                 </div>
                 <div className="exam-divider" role="separator" aria-hidden="true" />
               </>
@@ -492,7 +494,7 @@ export default function TestExam({
                 </button>
               </div>
               <div className="exam-stem">
-                <MathText text={q.question_text} />
+                <QuestionText html={q.question_text_html} text={q.question_text} />
               </div>
               {q.is_grid_in ? (
                 <input
@@ -512,7 +514,7 @@ export default function TestExam({
                     >
                       <span className="exam-choice-label">{c.label}</span>
                       <span className="exam-choice-text">
-                        <MathText text={c.text} />
+                        <QuestionText html={c.html} text={c.text} />
                       </span>
                     </button>
                   ))}

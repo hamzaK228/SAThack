@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import MathText from "@/components/MathText";
+import QuestionText from "@/components/QuestionText";
 import { saveDiagnostic } from "@/app/dashboard/actions";
 
 type Q = {
@@ -13,8 +13,10 @@ type Q = {
   difficulty: string;
   is_grid_in: boolean;
   question_text: string;
+  question_text_html?: string | null;
   passage: string | null;
-  choices: { label: string; text: string }[] | null;
+  passage_html?: string | null;
+  choices: { label: string; text: string; html?: string | null }[] | null;
   correct_answer: string;
 };
 
@@ -153,12 +155,12 @@ export default function DiagnosticExam({ questions }: { questions: Q[] }) {
         <div className="exam-panes">
           {q.passage && (
             <div className="exam-passage">
-              <MathText text={q.passage} />
+              <QuestionText html={q.passage_html} text={q.passage} />
             </div>
           )}
           <div className="exam-question">
             <div className="exam-stem">
-              <MathText text={q.question_text} />
+              <QuestionText html={q.question_text_html} text={q.question_text} />
             </div>
             {q.is_grid_in ? (
               <input
@@ -178,7 +180,7 @@ export default function DiagnosticExam({ questions }: { questions: Q[] }) {
                   >
                     <span className="exam-choice-label">{c.label}</span>
                     <span className="exam-choice-text">
-                      <MathText text={c.text} />
+                      <QuestionText html={c.html} text={c.text} />
                     </span>
                   </button>
                 ))}

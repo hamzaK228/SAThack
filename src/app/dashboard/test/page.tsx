@@ -5,7 +5,7 @@ import TestExam, { type TestModule, type TestQuestion } from "@/components/dashb
 export const dynamic = "force-dynamic";
 
 const COLS =
-  "id, section, domain, skill, difficulty, is_grid_in, question_text, passage, choices, correct_answer, explanation";
+  "id, section, domain, skill, difficulty, is_grid_in, question_text, question_text_html, passage, passage_html, choices, correct_answer, explanation";
 
 function hash(s: string): number {
   let h = 0;

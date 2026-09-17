@@ -33,6 +33,9 @@ supabase db push
 - `migrations/2026-09-17-plan-tasks.sql` — reconciles `plan_tasks` (task keys +
   the `done` flag + the `user_id`/`task_key` key its check-off upsert needs).
   Without it ticking a task off never persists.
+- `migrations/2026-09-17-question-media.sql` — the `question_text_html` /
+  `passage_html` columns that carry each question's graph or table. Without it
+  questions render as plain text (no graphs, no table structure).
 
 It is idempotent, and the app degrades gracefully if you haven't run it yet:
 vocab falls back to saved-flags only, plan check-off just doesn't persist, the
@@ -53,6 +56,36 @@ python3 scripts/seed_vocab.py           # JSON  -> Supabase
 
 Corpora are cached in-process, so **restart the dev server** after changing
 `sat-corpus*.json`.
+
+### Question graphics and tables
+
+~1 in 6 questions carries media the plain text can't express: a matplotlib
+`<svg>` graph (usually in the stem — "the graph of *f* is shown…") or a `<table>`
+of data. The extractor keeps a **sanitized** copy of that markup
+(`scripts/rich_html.py`: tag/attribute allowlists, no `on*` handlers, no
+`javascript:`, inline styles only inside `<svg>`), and `QuestionText` renders it —
+falling back to the plain-text columns for the other 85%, so nothing else
+changes.
+
+An existing database needs a one-off backfill (it only writes the two media
+columns, keyed by `source_id`, so attempts and saved questions stay linked):
+
+```bash
+python3 scripts/backfill_question_media.py --fetch   # ~5 min, resumable
+python3 scripts/backfill_question_media.py --push    # needs the temp rpc below
+```
+
+`--push` uses a narrow temporary loader; create it, run the push, then drop it:
+
+```bash
+python3 scripts/backfill_question_media.py --print-rpc-sql   # run this in Supabase
+python3 scripts/backfill_question_media.py --push
+python3 scripts/backfill_question_media.py --print-drop-sql  # and this afterwards
+```
+
+Prefer the SQL editor? `--sql-out media-seed.sql` emits the equivalent SQL
+instead. A full re-extraction (`extract_questions.py` + `seed_questions.py`)
+now writes these columns too, so a fresh install needs none of this.
 
 ## AI (optional)
 
