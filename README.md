@@ -27,10 +27,17 @@ supabase db push
 - `migrations/2026-09-15-polish.sql` — spaced repetition on `vocab_progress`,
   `study_plans` + `plan_tasks` (plan check-off), the `leaderboard()` RPC, vocab
   example cleanup, and dropping the unused `lessons` table.
+- `migrations/2026-09-17-plan-cache.sql` — the `study_plans` columns that cache
+  the AI narrative between renders (plus a one-per-user key for the upsert).
+  Without it the plan is rebuilt from scratch on every render.
+- `migrations/2026-09-17-plan-tasks.sql` — reconciles `plan_tasks` (task keys +
+  the `done` flag + the `user_id`/`task_key` key its check-off upsert needs).
+  Without it ticking a task off never persists.
 
 It is idempotent, and the app degrades gracefully if you haven't run it yet:
-vocab falls back to saved-flags only, plan check-off just doesn't persist, and
-the leaderboard shows a setup note. Your own XP/level/badges need no migration.
+vocab falls back to saved-flags only, plan check-off just doesn't persist, the
+leaderboard shows a setup note, and the study plan is regenerated per render.
+Your own XP/level/badges need no migration.
 
 ## Seeding content
 
@@ -59,6 +66,12 @@ retrieval over the book corpus. To use a real model, set in `.env.local`:
 
 Any OpenAI-compatible `/chat/completions` endpoint works. Users can override the
 model per-account in **Settings → AI model**.
+
+`SAT_AI_TIMEOUT_MS` (default `20000`) caps a single model call. The planner and
+the tutor run inside a page render, so a stalled provider falls back to the
+offline book corpus instead of hanging the page. The generated plan narrative is
+cached per user (keyed by their results), so navigating — or editing a goal like
+the test date — reuses it instead of paying for a new call.
 
 Qwen3.8 Flash (Alibaba, Aug 2026) is a multimodal reasoning model with a 1M-token
 context at $0.15/M in · $0.47/M out — roughly 8× the context window and cheaper

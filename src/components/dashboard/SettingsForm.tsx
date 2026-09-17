@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateGoals } from "@/app/dashboard/actions";
+import { useExamDate } from "@/components/dashboard/ExamDate";
 
 export default function SettingsForm({
   targetScore,
@@ -14,20 +15,34 @@ export default function SettingsForm({
   testDate: string | null;
 }) {
   const router = useRouter();
+  const { setTestDate } = useExamDate();
   const [target, setTarget] = useState(targetScore || 1400);
   const [current, setCurrent] = useState(currentScore ?? 0);
   const [date, setDate] = useState(testDate || "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function save() {
     setSaving(true);
-    await updateGoals({
+    setSaved(false);
+    setError(null);
+
+    const result = await updateGoals({
       target_score: target,
       current_score: current || null,
       test_date: date || null,
     });
+
     setSaving(false);
+
+    if (!result.ok) {
+      setError(result.error ?? "Couldn't save your goals. Please try again.");
+      return;
+    }
+
+    // Keep the dashboard countdowns in step if they share this page's tree.
+    setTestDate(date || null);
     setSaved(true);
     router.refresh();
     setTimeout(() => setSaved(false), 2000);
@@ -78,11 +93,14 @@ export default function SettingsForm({
           />
         </label>
       </div>
+      {error && (
+        <p className="feedback bad" role="alert" style={{ marginTop: "1rem" }}>
+          {error}
+        </p>
+      )}
       <button className="btn btn-primary" onClick={save} disabled={saving} style={{ marginTop: "1.25rem" }}>
         {saving ? "Saving…" : saved ? "Saved ✓" : "Save goals"}
       </button>
     </div>
   );
 }
-
-

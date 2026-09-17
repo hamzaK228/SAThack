@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { CountUp, Reveal } from "@/components/Reveal";
 import Magnetic from "@/components/Magnetic";
 import DashboardGoals from "@/components/dashboard/DashboardGoals";
+import { ExamCountdown, DaysUntilExam, ExamDateProvider } from "@/components/dashboard/ExamDate";
 import PlanChecklist from "@/components/dashboard/PlanChecklist";
 import ContributionGraph from "@/components/dashboard/ContributionGraph";
 import { getStudyPlan } from "@/lib/study-plan-data";
@@ -12,9 +14,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardHome() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { data: profile } = await supabase
@@ -62,12 +62,6 @@ export default async function DashboardHome() {
   const name = profile?.full_name?.split(" ")[0] || "there";
   const isNew = !diagnostic && n === 0;
 
-  let daysLeft: number | null = null;
-  if (profile?.test_date) {
-    const diff = new Date(profile.test_date).getTime() - new Date().getTime();
-    daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
-  }
-
   // Per-day activity for the contribution graph.
   const heatDays: Record<string, number> = {};
   for (const a of attempts) {
@@ -106,175 +100,162 @@ export default async function DashboardHome() {
 
   return (
     <div className="dash-page">
-      <div className="dash-head">
-        <div>
-          <h1 className="dash-title">Welcome back, {name} 👋</h1>
-          <p className="dash-sub">
-            {profile?.target_score
-              ? `You're aiming for a ${profile.target_score}. Let's close the gap.`
-              : "Set your goals below to start building your plan."}
-          </p>
-        </div>
-        <div className="dash-head-actions">
-          {daysLeft !== null && (
-            <div className="dash-countdown">
-              <span className="dash-countdown-num">{Math.max(0, daysLeft)}</span>
-              <span className="dash-countdown-label">days until SAT</span>
-            </div>
-          )}
-          <Magnetic>
-            <Link className="btn btn-primary" href="/dashboard/session">
-              Start session →
-            </Link>
-          </Magnetic>
-        </div>
-      </div>
-
-      <Reveal>
-        <DashboardGoals
-          currentScore={profile?.current_score ?? null}
-          targetScore={profile?.target_score ?? null}
-          testDate={profile?.test_date ?? null}
-        />
-      </Reveal>
-
-      <div className="dash-stat-grid">
-        <Reveal>
-          <div className="dash-stat-card">
-            <span className="dash-stat-label">Days until SAT</span>
-            <span className="dash-stat-value accent">
-              {daysLeft !== null ? <CountUp to={Math.max(0, daysLeft)} /> : "—"}
-            </span>
-            <span className="dash-stat-date">
-              {profile?.test_date
-                ? new Date(profile.test_date + "T00:00:00").toLocaleDateString(undefined, {
-                    weekday: "long",
-                    month: "short",
-                    day: "numeric",
-                  })
-                : "Set your test date"}
-            </span>
-          </div>
-        </Reveal>
-        <Reveal delay={0.06}>
-          <div className="dash-stat-card">
-            <span className="dash-stat-label">Current score</span>
-            <span className="dash-stat-value">
-              {profile?.current_score ? <CountUp to={profile.current_score} /> : "—"}
-            </span>
-          </div>
-        </Reveal>
-        <Reveal delay={0.12}>
-          <div className="dash-stat-card">
-            <span className="dash-stat-label">Target score</span>
-            <span className="dash-stat-value">
-              {profile?.target_score ? <CountUp to={profile.target_score} /> : "—"}
-            </span>
-          </div>
-        </Reveal>
-        <Reveal delay={0.18}>
-          <div className="dash-stat-card">
-            <span className="dash-stat-label">Accuracy</span>
-            <span className="dash-stat-value accent">
-              {accuracy !== null ? <CountUp to={accuracy} suffix="%" /> : "—"}
-            </span>
-          </div>
-        </Reveal>
-      </div>
-
-      <Reveal>
-        <Link className="dash-progress" href="/dashboard/leaderboard">
-          <span className="dash-progress-badge" aria-hidden="true">
-            {level.level}
-          </span>
-          <span className="dash-progress-info">
-            <strong>{level.title}</strong>
-            <span>
-              {xp.toLocaleString()} XP · 🔥 {streak}-day streak
-            </span>
-          </span>
-          <span className="dash-progress-cta">View progress →</span>
-        </Link>
-      </Reveal>
-
-      <Reveal>
-        <div className="dash-card">
-          <h2 className="dash-section-title">🔥 Practice activity</h2>
-          <ContributionGraph days={heatDays} />
-        </div>
-      </Reveal>
-
-      {isNew ? (
-        <Reveal>
-          <div className="dash-card dash-onboard">
-            <h2 className="dash-section-title">🏁 Let&apos;s get started</h2>
-            <p className="dash-onboard-text">
-              Complete a short diagnostic to find your weak spots and unlock your personal study plan.
+      {/* The test date lives on the client so saving a goal moves every
+          countdown on the page immediately — see ExamDate.tsx. */}
+      <ExamDateProvider initial={profile?.test_date ?? null}>
+        <div className="dash-head">
+          <div>
+            <h1 className="dash-title">Welcome back, {name} 👋</h1>
+            <p className="dash-sub">
+              {profile?.target_score
+                ? `You're aiming for a ${profile.target_score}. Let's close the gap.`
+                : "Set your goals below to start building your plan."}
             </p>
-            <div className="dash-onboard-actions">
-              <Link className="btn btn-primary" href="/dashboard/diagnostic">
-                🚀 Start diagnostic
-              </Link>
-              <Link className="btn btn-ghost" href="/dashboard/test">
-                📝 Take a practice test
-              </Link>
-            </div>
           </div>
+          <div className="dash-head-actions">
+            <ExamCountdown />
+            <Magnetic>
+              <Link className="btn btn-primary" href="/dashboard/session">
+                Start session →
+              </Link>
+            </Magnetic>
+          </div>
+        </div>
+
+        <Reveal>
+          <DashboardGoals
+            currentScore={profile?.current_score ?? null}
+            targetScore={profile?.target_score ?? null}
+            testDate={profile?.test_date ?? null}
+          />
         </Reveal>
-      ) : (
+
+        <div className="dash-stat-grid">
+          <Reveal>
+            <div className="dash-stat-card">
+              <DaysUntilExam />
+            </div>
+          </Reveal>
+          <Reveal delay={0.06}>
+            <div className="dash-stat-card">
+              <span className="dash-stat-label">Current score</span>
+              <span className="dash-stat-value">
+                {profile?.current_score ? <CountUp to={profile.current_score} /> : "—"}
+              </span>
+            </div>
+          </Reveal>
+          <Reveal delay={0.12}>
+            <div className="dash-stat-card">
+              <span className="dash-stat-label">Target score</span>
+              <span className="dash-stat-value">
+                {profile?.target_score ? <CountUp to={profile.target_score} /> : "—"}
+              </span>
+            </div>
+          </Reveal>
+          <Reveal delay={0.18}>
+            <div className="dash-stat-card">
+              <span className="dash-stat-label">Accuracy</span>
+              <span className="dash-stat-value accent">
+                {accuracy !== null ? <CountUp to={accuracy} suffix="%" /> : "—"}
+              </span>
+            </div>
+          </Reveal>
+        </div>
+
+        <Reveal>
+          <Link className="dash-progress" href="/dashboard/leaderboard">
+            <span className="dash-progress-badge" aria-hidden="true">
+              {level.level}
+            </span>
+            <span className="dash-progress-info">
+              <strong>{level.title}</strong>
+              <span>
+                {xp.toLocaleString()} XP · 🔥 {streak}-day streak
+              </span>
+            </span>
+            <span className="dash-progress-cta">View progress →</span>
+          </Link>
+        </Reveal>
+
         <Reveal>
           <div className="dash-card">
-            <h2 className="dash-section-title">Your score breakdown</h2>
-            <div className="dash-score-row">
-              <div>
-                <span className="dash-score-label">Reading &amp; Writing</span>
-                <span className="dash-score-val">{diagnostic?.rw_score ?? "—"}</span>
-              </div>
-              <div>
-                <span className="dash-score-label">Math</span>
-                <span className="dash-score-val">{diagnostic?.math_score ?? "—"}</span>
-              </div>
-            </div>
+            <h2 className="dash-section-title">🔥 Practice activity</h2>
+            <ContributionGraph days={heatDays} />
           </div>
         </Reveal>
-      )}
 
-      <Reveal>
-        <div className="dash-card">
-          <div className="dash-plan-head">
-            <h2 className="dash-section-title" style={{ marginBottom: 0 }}>
-              📅 This week&apos;s plan
-            </h2>
-            <Link className="btn btn-ghost" href="/dashboard/plan">
-              Full plan →
-            </Link>
+        {isNew ? (
+          <Reveal>
+            <div className="dash-card dash-onboard">
+              <h2 className="dash-section-title">🏁 Let&apos;s get started</h2>
+              <p className="dash-onboard-text">
+                Complete a short diagnostic to find your weak spots and unlock your personal study plan.
+              </p>
+              <div className="dash-onboard-actions">
+                <Link className="btn btn-primary" href="/dashboard/diagnostic">
+                  🚀 Start diagnostic
+                </Link>
+                <Link className="btn btn-ghost" href="/dashboard/test">
+                  📝 Take a practice test
+                </Link>
+              </div>
+            </div>
+          </Reveal>
+        ) : (
+          <Reveal>
+            <div className="dash-card">
+              <h2 className="dash-section-title">Your score breakdown</h2>
+              <div className="dash-score-row">
+                <div>
+                  <span className="dash-score-label">Reading &amp; Writing</span>
+                  <span className="dash-score-val">{diagnostic?.rw_score ?? "—"}</span>
+                </div>
+                <div>
+                  <span className="dash-score-label">Math</span>
+                  <span className="dash-score-val">{diagnostic?.math_score ?? "—"}</span>
+                </div>
+              </div>
+            </div>
+          </Reveal>
+        )}
+
+        <Reveal>
+          <div className="dash-card">
+            <div className="dash-plan-head">
+              <h2 className="dash-section-title" style={{ marginBottom: 0 }}>
+                📅 This week&apos;s plan
+              </h2>
+              <Link className="btn btn-ghost" href="/dashboard/plan">
+                Full plan →
+              </Link>
+            </div>
+            <PlanChecklist tasks={thisWeek} done={plan.done} />
           </div>
-          <PlanChecklist tasks={thisWeek} done={plan.done} />
-        </div>
-      </Reveal>
+        </Reveal>
 
-      <div className="dash-quick-grid">
-        <Link className="dash-quick" href="/dashboard/session">
-          <span className="dash-quick-icon">⚡</span>
-          <span className="dash-quick-title">Study Session</span>
-          <span className="dash-quick-sub">Targeted practice</span>
-        </Link>
-        <Link className="dash-quick" href="/dashboard/test">
-          <span className="dash-quick-icon">▣</span>
-          <span className="dash-quick-title">Practice Test</span>
-          <span className="dash-quick-sub">Full adaptive mock</span>
-        </Link>
-        <Link className="dash-quick" href="/dashboard/vocab">
-          <span className="dash-quick-icon">Aa</span>
-          <span className="dash-quick-title">Vocab</span>
-          <span className="dash-quick-sub">Words in context</span>
-        </Link>
-        <Link className="dash-quick" href="/dashboard/review">
-          <span className="dash-quick-icon">↻</span>
-          <span className="dash-quick-title">Review Queue</span>
-          <span className="dash-quick-sub">Master your misses</span>
-        </Link>
-      </div>
+        <div className="dash-quick-grid">
+          <Link className="dash-quick" href="/dashboard/session">
+            <span className="dash-quick-icon">⚡</span>
+            <span className="dash-quick-title">Study Session</span>
+            <span className="dash-quick-sub">Targeted practice</span>
+          </Link>
+          <Link className="dash-quick" href="/dashboard/test">
+            <span className="dash-quick-icon">▣</span>
+            <span className="dash-quick-title">Practice Test</span>
+            <span className="dash-quick-sub">Full adaptive mock</span>
+          </Link>
+          <Link className="dash-quick" href="/dashboard/vocab">
+            <span className="dash-quick-icon">Aa</span>
+            <span className="dash-quick-title">Vocab</span>
+            <span className="dash-quick-sub">Words in context</span>
+          </Link>
+          <Link className="dash-quick" href="/dashboard/review">
+            <span className="dash-quick-icon">↻</span>
+            <span className="dash-quick-title">Review Queue</span>
+            <span className="dash-quick-sub">Master your misses</span>
+          </Link>
+        </div>
+      </ExamDateProvider>
     </div>
   );
 }

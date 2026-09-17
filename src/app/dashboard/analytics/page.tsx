@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { CountUp, Reveal } from "@/components/Reveal";
 import AccBars from "@/components/dashboard/AccBars";
 import ActivityChart from "@/components/dashboard/ActivityChart";
@@ -33,9 +34,7 @@ function acc(s: Stat | undefined): number | null {
 
 export default async function AnalyticsPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { data: attempts } = await supabase

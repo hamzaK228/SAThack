@@ -1651,6 +1651,89 @@ strong {
   background: rgba(74, 222, 128, 0.06);
 }
 
+/* Inline validation, password reveal and strength — the register form's
+   feedback loop. Errors sit under the field they belong to, and only appear
+   once the field has been touched. */
+.field-error {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--bad);
+}
+.field-input[aria-invalid="true"] {
+  border-color: rgba(251, 113, 133, 0.6);
+}
+.field-password {
+  position: relative;
+  display: block;
+}
+.field-password .field-input {
+  padding-right: 4.5rem;
+}
+.field-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.6rem;
+  transform: translateY(-50%);
+  padding: 0.3rem 0.55rem;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--ink-dim);
+  background: var(--bg-2);
+  border: 1px solid var(--border-bright);
+  border-radius: 6px;
+  transition: color 150ms var(--ease-out), border-color 150ms var(--ease-out);
+}
+.field-password-toggle:hover {
+  color: var(--ink);
+  border-color: var(--signal);
+}
+.password-strength {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.password-strength-bar {
+  flex: 1;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border-bright);
+  overflow: hidden;
+}
+.password-strength-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--bad);
+  transition: width 260ms var(--ease-out), background 260ms var(--ease-out);
+}
+.password-strength-bar > span[data-score="2"] {
+  background: var(--warn);
+}
+.password-strength-bar > span[data-score="3"] {
+  background: var(--signal-2);
+}
+.password-strength-bar > span[data-score="4"] {
+  background: var(--ok);
+}
+.auth-feedback:empty {
+  display: none;
+}
+.auth-alt {
+  text-align: center;
+}
+.auth-link {
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 700;
+  color: var(--signal);
+  background: none;
+  border: none;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 /* ==========================================================================
    Dashboard layout
    ========================================================================== */

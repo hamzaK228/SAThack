@@ -3,10 +3,11 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { knowledgeForTopic } from "@/lib/ai/knowledge";
 import { chatCompletion } from "@/lib/ai/llm";
 import { applyReview } from "@/lib/vocab";
-import { getStudyPlan } from "@/lib/study-plan-data";
+import { regenerateStudyPlan } from "@/lib/study-plan-data";
 
 export async function recordAttempt(input: {
   question_id: string;
@@ -39,26 +40,49 @@ export async function recordAttempt(input: {
   revalidatePath("/dashboard/review");
 }
 
+/** Server-side guard rails for the goal editor — mirrors the DB check constraints. */
+function validScore(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 400 && value <= 1600;
+}
+
+function validTestDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number);
+  const parsed = new Date(y, m - 1, d);
+  return (
+    parsed.getFullYear() === y && parsed.getMonth() === m - 1 && parsed.getDate() === d
+  );
+}
+
 export async function updateGoals(input: {
   target_score?: number;
   current_score?: number | null;
   test_date?: string | null;
-}) {
+}): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
   const patch: Record<string, unknown> = {};
-  if (typeof input.target_score === "number") patch.target_score = input.target_score;
-  if (typeof input.current_score === "number" || input.current_score === null) {
+  if (input.target_score !== undefined) {
+    if (!validScore(input.target_score)) {
+      return { ok: false, error: "Target score must be between 400 and 1600." };
+    }
+    patch.target_score = input.target_score;
+  }
+  if (input.current_score !== undefined) {
+    if (input.current_score !== null && !validScore(input.current_score)) {
+      return { ok: false, error: "Current score must be between 400 and 1600." };
+    }
     patch.current_score = input.current_score;
   }
   if (input.test_date !== undefined) {
-    patch.test_date = input.test_date || null;
+    if (input.test_date !== null && !validTestDate(input.test_date)) {
+      return { ok: false, error: "That test date doesn't look right — try picking it again." };
+    }
+    patch.test_date = input.test_date;
   }
-  if (Object.keys(patch).length === 0) return;
+  if (Object.keys(patch).length === 0) return { ok: true };
 
   const { data } = await supabase
     .from("profiles")
@@ -66,11 +90,19 @@ export async function updateGoals(input: {
     .eq("id", user.id)
     .maybeSingle();
 
-  if (data) {
-    await supabase.from("profiles").update(patch).eq("id", user.id);
-  } else {
-    await supabase.from("profiles").insert({ id: user.id, ...patch });
-  }
+  const { error } = data
+    ? await supabase.from("profiles").update(patch).eq("id", user.id)
+    : await supabase.from("profiles").insert({ id: user.id, ...patch });
+
+  if (error) return { ok: false, error: error.message };
+
+  // Anything that renders the goal or the plan built from it.
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/plan");
+  revalidatePath("/dashboard/analytics");
+  revalidatePath("/dashboard/settings");
+
+  return { ok: true };
 }
 
 export async function toggleSave(question_id: string) {
@@ -352,14 +384,12 @@ export async function setPlanTaskDone(input: {
   domain: string | null;
   minutes: number;
   done: boolean;
-}) {
+}): Promise<{ ok: boolean }> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
-  await supabase.from("plan_tasks").upsert(
+  const { error } = await supabase.from("plan_tasks").upsert(
     {
       user_id: user.id,
       task_key: input.task_key,
@@ -374,46 +404,27 @@ export async function setPlanTaskDone(input: {
     { onConflict: "user_id,task_key" }
   );
 
+  // Report the failure so the checklist can put the tick back.
+  if (error) return { ok: false };
+
   revalidatePath("/dashboard/plan");
   revalidatePath("/dashboard");
+  return { ok: true };
 }
 
 
 /**
- * Let the AI re-plan from scratch: rebuild the plan from the latest results and
- * snapshot it into `study_plans`. The saved plan is what the dashboard and the
- * Study Plan page both read, so the agent stays the single planner.
+ * Let the AI re-plan from scratch: rebuild the narrative from the latest
+ * results and save it, so the dashboard and the Study Plan page both pick it up.
+ * The plan itself is still produced by one engine (src/lib/study-plan-data.ts) —
+ * this only forces it to ignore the plan it already had.
  */
 export async function regeneratePlan() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
-  const bundle = await getStudyPlan();
+  const bundle = await regenerateStudyPlan();
   if (!bundle) return;
-
-  const { plan } = bundle;
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("test_date")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  await supabase.from("study_plans").upsert(
-    {
-      user_id: user.id,
-      target_score: plan.targetScore,
-      current_score: plan.currentScore,
-      test_date: profile?.test_date ?? null,
-      weeks: plan.weeks,
-      summary: plan.summary,
-      generated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_id" }
-  );
 
   revalidatePath("/dashboard/plan");
   revalidatePath("/dashboard");

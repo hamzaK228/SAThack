@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import MathText from "@/components/MathText";
 
 export const dynamic = "force-dynamic";
@@ -13,9 +14,7 @@ type Attempt = {
 
 export default async function ReviewPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   // Latest result per question (attempts ordered newest-first).

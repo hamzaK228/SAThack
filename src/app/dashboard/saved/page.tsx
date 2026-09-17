@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import MathText from "@/components/MathText";
 import UnsaveButton from "@/components/dashboard/UnsaveButton";
 
@@ -7,9 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SavedPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { data: saved } = await supabase

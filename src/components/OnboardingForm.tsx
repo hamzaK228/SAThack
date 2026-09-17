@@ -34,13 +34,17 @@ export default function OnboardingForm({ initial }: { initial: OnboardingInitial
     setSaving(true);
     setError(null);
     try {
-      await updateGoals({
+      const result = await updateGoals({
         target_score: target,
         current_score: current === "" ? null : Number(current),
         test_date: date || null,
       });
-      router.push(withDiagnostic ? "/dashboard/diagnostic" : "/dashboard");
-      router.refresh();
+      if (!result.ok) {
+        setError(result.error ?? "Couldn't save your goals — you can set them later in Settings.");
+        setSaving(false);
+        return;
+      }
+      router.replace(withDiagnostic ? "/dashboard/diagnostic" : "/dashboard");
     } catch {
       setError("Couldn't save your goals — you can set them later in Settings.");
       setSaving(false);

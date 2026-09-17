@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import DiagnosticExam from "@/components/dashboard/DiagnosticExam";
 
 export const dynamic = "force-dynamic";
@@ -8,9 +9,7 @@ const COLS =
 
 export default async function DiagnosticPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { data: rw } = await supabase

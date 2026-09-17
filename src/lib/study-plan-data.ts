@@ -1,10 +1,13 @@
 import { cache } from "react";
 import { createClient } from "./supabase/server";
+import { getCurrentUser } from "./supabase/auth";
 import {
   generatePlan,
+  isPlanNarrative,
   type GeneratedPlan,
   type Mistake,
   type PlanContext,
+  type PlanNarrative,
   type SkillStat,
 } from "./ai/study-plan";
 import { taskKey, type DomainStat } from "./plan";
@@ -16,6 +19,13 @@ import { taskKey, type DomainStat } from "./plan";
  * from here, so the AI engine is never bypassed and the two views can't
  * disagree. `cache()` de-duplicates the work (and the AI call) within a single
  * request render.
+ *
+ * The expensive part of a plan is the *narrative* (summary, strengths,
+ * insights…), which is written by a model. It is cached in `study_plans` and
+ * keyed by a signature of the student's results — so it survives navigation,
+ * and editing a goal like the test date no longer costs an LLM round trip. The
+ * schedule (weeks, days left, tasks) is pure arithmetic and is always rebuilt
+ * from the current goals.
  */
 
 export type PlanWithProgress = GeneratedPlan & {
@@ -32,11 +42,35 @@ type Attempt = {
   created_at: string;
 };
 
-async function loadPlan(): Promise<PlanBundle | null> {
+/**
+ * Identity of "the results this narrative was written for".
+ *
+ * Deliberately excludes the test date: moving test day changes the schedule,
+ * not the analysis, and must never trigger a model call on the critical path of
+ * a save. Target/current score *are* included — the narrative is written around
+ * them. A stored plan with a different signature is simply regenerated.
+ */
+function planSignature(input: {
+  targetScore: number;
+  currentScore: number | null;
+  model: string | null;
+  attempts: Attempt[];
+  correct: number;
+}): string {
+  const latest = input.attempts[0]?.created_at ?? "none";
+  return [
+    input.targetScore,
+    input.currentScore ?? "-",
+    input.model ?? "default",
+    input.attempts.length,
+    input.correct,
+    latest,
+  ].join("|");
+}
+
+async function loadPlan(force = false): Promise<PlanBundle | null> {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { data: profile } = await supabase
@@ -127,11 +161,62 @@ async function loadPlan(): Promise<PlanBundle | null> {
     mistakes,
   };
 
-  const base = await generatePlan(ctx, profile?.ai_model ?? null);
+  const model = profile?.ai_model ?? null;
+  const signature = planSignature({
+    targetScore: ctx.targetScore,
+    currentScore: ctx.currentScore,
+    model,
+    attempts,
+    correct: attempts.filter((a) => a.is_correct).length,
+  });
+
+  // The narrative from the last generation, when it still describes these
+  // results. Anything unreadable (e.g. the migration below hasn't run) just
+  // means "write a new one".
+  let narrative: PlanNarrative | null = null;
+  if (!force) {
+    const { data: saved } = await supabase
+      .from("study_plans")
+      .select("signature, plan")
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (saved?.signature === signature && isPlanNarrative(saved.plan)) {
+      narrative = saved.plan;
+    }
+  }
+
+  const generated = await generatePlan(ctx, model, narrative);
+
+  // Reusing the narrative leaves nothing to persist; a fresh one is saved so
+  // every later render (and navigation) is instant.
+  if (!narrative) {
+    const next: PlanNarrative = {
+      summary: generated.summary,
+      strengths: generated.strengths,
+      weaknesses: generated.weaknesses,
+      insights: generated.insights,
+      tips: generated.tips,
+      source: generated.source,
+    };
+    await supabase.from("study_plans").upsert(
+      {
+        user_id: user.id,
+        target_score: ctx.targetScore,
+        current_score: ctx.currentScore,
+        test_date: ctx.testDate,
+        weeks: generated.weeks,
+        summary: generated.summary,
+        signature,
+        plan: next,
+        generated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+  }
 
   // Persisted check-off state (empty when the migration hasn't been applied).
   const done: Record<string, boolean> = {};
-  const keys = base.tasks.map(taskKey);
+  const keys = generated.tasks.map(taskKey);
   if (keys.length) {
     const { data: rows } = await supabase
       .from("plan_tasks")
@@ -141,8 +226,15 @@ async function loadPlan(): Promise<PlanBundle | null> {
     for (const row of rows ?? []) done[row.task_key] = row.done;
   }
 
-  return { userId: user.id, plan: { ...base, done } };
+  return { userId: user.id, plan: { ...generated, done } };
 }
 
 /** Request-scoped memoised study plan (AI engine + persisted progress). */
 export const getStudyPlan = cache(loadPlan);
+
+/**
+ * Same plan, but the narrative is rewritten from scratch — the "Re-plan with
+ * AI" button. Also refreshes the cache every render reads.
+ */
+export const regenerateStudyPlan = cache(() => loadPlan(true));
+

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import MathText from "@/components/MathText";
 import { knowledgeForTopic } from "@/lib/ai/knowledge";
 
@@ -10,10 +10,7 @@ export default async function LessonPage({
 }: {
   searchParams: Promise<{ domain?: string; skill?: string }>;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { domain, skill } = await searchParams;

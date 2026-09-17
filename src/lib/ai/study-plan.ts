@@ -1,4 +1,5 @@
 import { buildPlan, DOMAIN_ORDER, type DomainStat, type FocusDomain, type PlanTask } from "../plan";
+import { daysUntil } from "../exam-date";
 import { knowledgeForTopic } from "./knowledge";
 import { chatCompletion } from "./llm";
 
@@ -42,6 +43,32 @@ export type GeneratedPlan = {
   tasks: PlanTask[];
 };
 
+/**
+ * The part of a plan that only an LLM (or the offline fallback) can write.
+ *
+ * Everything else — weeks, days left, tasks, priority order — is pure
+ * arithmetic over the user's goals and results, so it is rebuilt on every
+ * render from the *current* test date. The narrative is the expensive bit, and
+ * `study_plans` caches it between renders (see src/lib/study-plan-data.ts).
+ */
+export type PlanNarrative = Pick<
+  GeneratedPlan,
+  "summary" | "strengths" | "weaknesses" | "insights" | "tips" | "source"
+>;
+
+/** True when `value` looks like a narrative we can safely render. */
+export function isPlanNarrative(value: unknown): value is PlanNarrative {
+  if (!value || typeof value !== "object") return false;
+  const n = value as Record<string, unknown>;
+  return (
+    typeof n.summary === "string" &&
+    Array.isArray(n.strengths) &&
+    Array.isArray(n.weaknesses) &&
+    Array.isArray(n.insights) &&
+    Array.isArray(n.tips)
+  );
+}
+
 function accOf(correct: number, total: number): number | null {
   if (!total) return null;
   return Math.round((correct / total) * 100);
@@ -75,9 +102,7 @@ function analyzeContext(ctx: PlanContext) {
   ];
   if (mistakeLines.length === 0) mistakeLines.push("- (no mistakes recorded yet)");
 
-  const daysLeft = ctx.testDate
-    ? Math.max(0, Math.ceil((new Date(ctx.testDate).getTime() - Date.now()) / 86400000))
-    : null;
+  const daysLeft = ctx.testDate ? Math.max(0, daysUntil(ctx.testDate) ?? 0) : null;
 
   return { domainLines, skillLines, mistakeLines, daysLeft };
 }
@@ -180,9 +205,41 @@ function localPlan(ctx: PlanContext, analysis: ReturnType<typeof analyzeContext>
   };
 }
 
-export async function generatePlan(ctx: PlanContext, model?: string | null): Promise<GeneratedPlan> {
+/**
+ * Build a plan.
+ *
+ * Pass `reuse` to skip the model entirely and keep a narrative that was already
+ * written for this student's current results — the week-by-week schedule is
+ * still rebuilt from the live context, so a new test date lands immediately
+ * instead of waiting on an LLM round trip.
+ */
+export async function generatePlan(
+  ctx: PlanContext,
+  model?: string | null,
+  reuse?: PlanNarrative | null
+): Promise<GeneratedPlan> {
   const analysis = analyzeContext(ctx);
   const statsMap = new Map(ctx.domainStats.map((d) => [d.domain, d]));
+
+  const base = buildPlan({
+    targetScore: ctx.targetScore,
+    currentScore: ctx.currentScore,
+    testDate: ctx.testDate,
+    stats: statsMap,
+  });
+  const gap = ctx.currentScore !== null ? ctx.targetScore - ctx.currentScore : null;
+
+  const schedule = {
+    weeks: base.weeks,
+    daysLeft: base.daysLeft,
+    targetScore: ctx.targetScore,
+    currentScore: ctx.currentScore,
+    gap,
+    focusDomains: base.focusDomains,
+    tasks: base.tasks,
+  };
+
+  if (reuse) return { ...reuse, ...schedule };
 
   const weakDomains = DOMAIN_ORDER.map((d) => {
     const s = statsMap.get(d);
@@ -194,14 +251,6 @@ export async function generatePlan(ctx: PlanContext, model?: string | null): Pro
 
   const book = knowledgeForTopic(weakDomains, ctx.skillStats.slice(0, 5).map((s) => s.skill));
   const bookSnippets = book.map((c) => c.text);
-
-  const base = buildPlan({
-    targetScore: ctx.targetScore,
-    currentScore: ctx.currentScore,
-    testDate: ctx.testDate,
-    stats: statsMap,
-  });
-  const gap = ctx.currentScore !== null ? ctx.targetScore - ctx.currentScore : null;
 
   const raw = await chatCompletion(buildPrompt(ctx, analysis, bookSnippets), { json: true, model });
 
@@ -222,13 +271,7 @@ export async function generatePlan(ctx: PlanContext, model?: string | null): Pro
           insights: parsed.insights ?? [],
           tips: parsed.tips ?? [],
           source: "ai",
-          weeks: base.weeks,
-          daysLeft: base.daysLeft,
-          targetScore: ctx.targetScore,
-          currentScore: ctx.currentScore,
-          gap,
-          focusDomains: base.focusDomains,
-          tasks: base.tasks,
+          ...schedule,
         };
       }
     } catch {
@@ -236,6 +279,6 @@ export async function generatePlan(ctx: PlanContext, model?: string | null): Pro
     }
   }
 
-  return localPlan(ctx, analysis, bookSnippets);
+  return { ...localPlan(ctx, analysis, bookSnippets), ...schedule };
 }
 

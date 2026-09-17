@@ -1,13 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import AIChat from "@/components/dashboard/AIChat";
 
 export const dynamic = "force-dynamic";
 
 export default async function TutorPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   return (

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import VocabCards, { type VocabWord } from "@/components/dashboard/VocabCards";
 import { cleanExample, isDue, type VocabProgress } from "@/lib/vocab";
 
@@ -24,9 +25,7 @@ export default async function VocabPage({
   searchParams: Promise<{ q?: string; view?: string; page?: string }>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const sp = await searchParams;

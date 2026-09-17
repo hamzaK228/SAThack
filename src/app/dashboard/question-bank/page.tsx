@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import BankFilters from "@/components/dashboard/BankFilters";
 import { computeStatuses } from "@/lib/question-status";
 
@@ -44,9 +45,7 @@ export default async function QuestionBankPage({
   searchParams: Promise<Search>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const sp = await searchParams;

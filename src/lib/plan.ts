@@ -7,6 +7,8 @@
  * stay in sync.
  */
 
+import { daysUntil } from "./exam-date";
+
 export const DOMAIN_ORDER = [
   "Algebra",
   "Advanced Math",
@@ -95,8 +97,9 @@ export function buildPlan(input: {
 
   let daysLeft: number | null = null;
   if (input.testDate) {
-    const diff = new Date(input.testDate).getTime() - Date.now();
-    daysLeft = Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+    // Local calendar days (src/lib/exam-date.ts) — never UTC, so the week count
+    // doesn't slip by one in western timezones.
+    daysLeft = Math.max(0, daysUntil(input.testDate) ?? 0);
   }
 
   const weeks = daysLeft !== null ? Math.max(1, Math.ceil(daysLeft / 7)) : 8;

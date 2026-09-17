@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { updateGoals } from "@/app/dashboard/actions";
+import { useExamDate } from "@/components/dashboard/ExamDate";
 
 export default function DashboardGoals({
   currentScore,
@@ -14,23 +15,39 @@ export default function DashboardGoals({
   testDate: string | null;
 }) {
   const router = useRouter();
+  const { setTestDate } = useExamDate();
   const [current, setCurrent] = useState(currentScore ?? 0);
   const [target, setTarget] = useState(targetScore ?? 0);
   const [date, setDate] = useState(testDate ?? "");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const gap = target && current ? target - current : null;
 
   async function save() {
     setSaving(true);
     setSaved(false);
-    await updateGoals({
+    setError(null);
+
+    // Move the countdowns now — the refresh below only confirms it.
+    const previousDate = testDate ?? "";
+    setTestDate(date || null);
+
+    const result = await updateGoals({
       target_score: target || undefined,
       current_score: current || null,
       test_date: date || null,
     });
+
     setSaving(false);
+
+    if (!result.ok) {
+      setTestDate(previousDate || null);
+      setError(result.error ?? "Couldn't save your goals. Please try again.");
+      return;
+    }
+
     setSaved(true);
     router.refresh();
     setTimeout(() => setSaved(false), 2200);
@@ -107,6 +124,12 @@ export default function DashboardGoals({
           />
         </label>
       </div>
+
+      {error && (
+        <p className="feedback bad" role="alert" style={{ marginTop: "1rem" }}>
+          {error}
+        </p>
+      )}
 
       <button className="btn btn-primary" onClick={save} disabled={saving}>
         {saving ? "Saving…" : saved ? "Saved ✓" : "Save goals"}

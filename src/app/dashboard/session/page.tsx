@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import StudySession from "@/components/dashboard/StudySession";
 import { computeStatuses } from "@/lib/question-status";
 
@@ -55,9 +56,7 @@ export default async function SessionPage({
   searchParams: Promise<Search>;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   const { domain, skill, difficulty, section, status, q } = await searchParams;

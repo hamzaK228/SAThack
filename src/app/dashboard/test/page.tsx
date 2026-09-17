@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import TestExam, { type TestModule, type TestQuestion } from "@/components/dashboard/TestExam";
 
 export const dynamic = "force-dynamic";
@@ -42,9 +43,7 @@ async function pick(
 
 export default async function TestPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   // Module 1 (fixed mix) — deterministic via ordered fetch + hash shuffle.

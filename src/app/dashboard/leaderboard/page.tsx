@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { CountUp, Reveal } from "@/components/Reveal";
 import { badgesFor, levelFor, streakFrom, xpFor, type ProgressStats } from "@/lib/gamification";
 
@@ -16,9 +17,7 @@ type LeaderRow = {
 
 export default async function LeaderboardPage() {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) return null;
 
   // --- my progress (derived, never stored) --------------------------------

@@ -42,7 +42,7 @@ export default function PlanChecklist({
     const key = taskKey(task);
     setState((s) => ({ ...s, [key]: next }));
     startTransition(async () => {
-      await setPlanTaskDone({
+      const result = await setPlanTaskDone({
         task_key: key,
         week: task.week,
         title: task.title,
@@ -51,6 +51,11 @@ export default function PlanChecklist({
         minutes: task.minutes,
         done: next,
       });
+      // The write didn't land — put the tick back rather than pretend.
+      if (!result.ok) {
+        setState((s) => ({ ...s, [key]: !next }));
+        return;
+      }
       router.refresh();
     });
   }
