@@ -59,6 +59,11 @@ try {
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page.waitForURL(/\/(onboarding|dashboard)/, { timeout: 30000 });
   console.log("PASS sign in");
+  await page.getByRole("link", { name: "Back to site", exact: true }).click();
+  await page.waitForURL(`${base}/`);
+  await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+  await page.waitForURL(`${base}/dashboard`);
+  console.log("PASS back to site keeps the signed-in session");
   for (const route of [
     "/dashboard",
     "/dashboard/question-bank",

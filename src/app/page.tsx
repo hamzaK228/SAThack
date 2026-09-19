@@ -10,17 +10,20 @@ import ScorePredictor from "@/components/ScorePredictor";
 import Pricing from "@/components/Pricing";
 import Faq from "@/components/Faq";
 import Footer from "@/components/Footer";
+import { getCurrentUser } from "@/lib/supabase/auth";
 export const metadata = { alternates: { canonical: "/" } };
 
-export default function Home() {
+export default async function Home() {
+  const signedIn = Boolean(await getCurrentUser());
+
   return (
     <>
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <Header />
+      <Header signedIn={signedIn} />
       <main id="main">
-        <Hero />
+        <Hero signedIn={signedIn} />
         <Marquee />
         <Stats />
         <HowItWorks />
@@ -28,7 +31,7 @@ export default function Home() {
         <StudyPlan />
         <Gamification />
         <ScorePredictor />
-        <Pricing />
+        <Pricing signedIn={signedIn} />
         <Faq />
       </main>
       <Footer />

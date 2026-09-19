@@ -19,7 +19,7 @@ const mobileLinks = [
   { href: "#faq", label: "FAQ" },
 ];
 
-export default function Header() {
+export default function Header({ signedIn = false }: { signedIn?: boolean }) {
   const [open, setOpen] = useState(false);
   const header=useRef<HTMLElement>(null);
   const toggle=useRef<HTMLButtonElement>(null);
@@ -54,8 +54,8 @@ export default function Header() {
           <a className="btn btn-ghost" href="#predictor">
             Score predictor
           </a>
-          <Link className="btn btn-primary" href="/auth">
-            Start now
+          <Link className="btn btn-primary" href={signedIn ? "/dashboard" : "/auth"}>
+            {signedIn ? "Dashboard" : "Start now"}
           </Link>
         </div>
 

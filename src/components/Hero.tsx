@@ -9,7 +9,7 @@ import Tilt from "./Tilt";
 
 const EASE = [0.21, 0.47, 0.32, 0.98] as const;
 
-export default function Hero() {
+export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
   const ref = useRef<HTMLElement>(null);
 
   function onMove(e: React.MouseEvent) {
@@ -69,8 +69,8 @@ export default function Hero() {
             transition={{ duration: 0.6, delay: 0.72, ease: EASE }}
           >
             <Magnetic>
-              <Link className="btn btn-primary btn-lg" href="/auth">
-                Start free diagnostic →
+              <Link className="btn btn-primary btn-lg" href={signedIn ? "/dashboard" : "/auth"}>
+                {signedIn ? "Return to dashboard →" : "Start free diagnostic →"}
               </Link>
             </Magnetic>
             <Magnetic strength={0.2}>
