@@ -46,7 +46,9 @@ export default function Hero() {
               The SAT is a system.
             </span>
             <span className="line grad">
-              Every system has a hack. Find yours.
+              <span className="hero-title-phrase">Every system</span>
+              <span className="hero-title-phrase">has a hack.</span>
+              <span className="hero-title-phrase">Find yours.</span>
             </span>
           </h1>
 

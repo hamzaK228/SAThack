@@ -334,6 +334,21 @@ strong {
     margin-left: 0;
   }
 }
+@media (max-width: 360px) {
+  .header-inner {
+    gap: 0.5rem;
+  }
+  .header-actions {
+    gap: 0.35rem;
+  }
+  .header-actions .btn-primary {
+    padding: 0.72rem 0.85rem;
+    font-size: 0.8rem;
+  }
+  .brand {
+    font-size: 1rem;
+  }
+}
 
 /* ==========================================================================
    Hero
@@ -369,6 +384,10 @@ strong {
 }
 .hero-title .line {
   display: block;
+}
+.hero-title-phrase {
+  display: block;
+  white-space: nowrap;
 }
 .hero-title .grad {
   background: linear-gradient(100deg, var(--signal), var(--signal-2) 50%, var(--violet));
