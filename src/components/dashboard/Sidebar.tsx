@@ -13,6 +13,7 @@ const nav = [
   { href: "/dashboard", label: "Home", icon: "⌂" },
   { href: "/dashboard/plan", label: "Study Plan", icon: "▤" },
   { href: "/dashboard/tutor", label: "AI Tutor", icon: "🤖" },
+  { href: "/dashboard/community", label: "Community", icon: "◎" },
   { href: "/dashboard/analytics", label: "Analytics", icon: "◔" },
   { href: "/dashboard/question-bank", label: "Question Bank", icon: "▦" },
   { href: "/dashboard/review", label: "Review Queue", icon: "↻" },

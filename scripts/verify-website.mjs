@@ -76,6 +76,7 @@ try {
     "/dashboard/test",
     "/dashboard/plan",
     "/dashboard/tutor",
+    "/dashboard/community",
   ])
     await visit(route);
   await visit("/dashboard/test?mode=adaptive");
@@ -134,13 +135,14 @@ try {
     "/dashboard/question-bank",
     "/dashboard/settings",
     "/dashboard/test?mode=adaptive",
+    "/dashboard/community",
   ])
     await visit(route);
   await page.screenshot({ path: `${output}/assessment-mobile.png` });
   await visit("/dashboard/test");
-  const testLinks = page.locator("a.practice-file-row");
-  assert.equal(await testLinks.count(), 10, "Expected ten digital practice tests");
-  await testLinks.first().click();
+  const testCards = page.locator("a.practice-test-card");
+  assert.equal(await testCards.count(), 10, "Expected ten digital practice tests");
+  await testCards.first().click();
   await page
     .getByRole("button", { name: /^(Continue test|Start|Start new test)$/ })
     .first()
