@@ -19,9 +19,13 @@ const ReferenceSheet = dynamic(() => import("./ReferenceSheet"));
 
 export default function AssessmentExam({
   kind,
+  formId,
+  title,
   initial,
 }: {
   kind: AssessmentKind;
+  formId?: string;
+  title?: string;
   initial: Assessment | null;
 }) {
   const router=useRouter();
@@ -72,6 +76,7 @@ export default function AssessmentExam({
     try {
       const next = await assessmentAction(fresh ? "start" : "resume", null, {
         kind,
+        formId,
       });
       if (!next)
         throw new Error("This test is no longer available. Start a new test.");
@@ -218,17 +223,15 @@ export default function AssessmentExam({
     return (
       <div className="exam-intro">
         <p className="eyebrow">
-          {kind === "adaptive" ? "Practice test" : "Diagnostic"}
+          {kind === "diagnostic" ? "Diagnostic" : "Practice test"}
         </p>
         <h1 className="exam-intro-title">
-          {kind === "adaptive"
-            ? "Digital SAT practice"
-            : "Find your starting point"}
+          {kind === "diagnostic" ? "Find your starting point" : title ?? "Digital SAT practice"}
         </h1>
         <p className="dash-sub">
-          {kind === "adaptive"
-            ? "98 questions. Four timed modules. 134 minutes."
-            : "22 questions. Reading & Writing and Math. Untimed."}
+          {kind === "diagnostic"
+            ? "22 questions. Reading & Writing and Math. Untimed."
+            : "98 questions. Four timed modules. 134 minutes. Module 2 adapts to your Module 1 performance."}
         </p>
         <p className="field-help">
           Results are practice estimates, not official SAT scores.

@@ -25,6 +25,12 @@ begin
  s:=public.assessment('start',null,'{"kind":"diagnostic"}');
  s:=public.assessment('advance',(s->>'id')::uuid,'{"moduleIndex":0,"answers":{}}');
  if (s->'result'->>'total')::int<>400 or (s->'result'->>'rwTotal')::int<>11 or (s->'result'->>'mathTotal')::int<>11 then raise exception 'Diagnostic scoring failed'; end if;
+ s:=public.assessment('start',null,'{"kind":"practice","formId":"digital-01"}');
+ if s->>'formId'<>'digital-01' or s->>'title'<>'Digital SAT Practice Test 1' or jsonb_array_length(s->'module'->'questions')<>27 then raise exception 'Digital practice form failed to start'; end if;
+ previous:=public.assessment('resume',null,'{"kind":"practice","formId":"digital-01"}');
+ if previous->'module'<>s->'module' then raise exception 'Digital practice form changed on resume'; end if;
+ for i in 0..3 loop s:=public.assessment('advance',(s->>'id')::uuid,jsonb_build_object('moduleIndex',i,'answers','{}'::jsonb)); end loop;
+ if s->>'status'<>'completed' or (s->'result'->>'rwTotal')::int<>54 or (s->'result'->>'mathTotal')::int<>44 then raise exception 'Digital practice form scoring failed'; end if;
  begin
   perform public.assessment('save',gen_random_uuid(),'{"moduleIndex":0,"answers":{}}');
   raise exception 'Unauthorized test accepted' using errcode='XX000';
@@ -46,5 +52,6 @@ begin
   raise exception 'Score forgery allowed' using errcode='XX000';
  exception when insufficient_privilege then null; end;
  if public.progress_summary() is null then raise exception 'Progress summary unavailable'; end if;
+ if (select count(*) from public.practice_forms where published)<>10 then raise exception 'Expected ten published digital tests'; end if;
 end $$;
 rollback;

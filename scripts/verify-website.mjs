@@ -138,35 +138,14 @@ try {
     await visit(route);
   await page.screenshot({ path: `${output}/assessment-mobile.png` });
   await visit("/dashboard/test");
-  const testLink = page.locator("a.practice-file-row").first();
-  if (await testLink.count()) {
-    await testLink.click();
-    await page.getByRole("button", { name: "Start test", exact: true }).click();
-    const scan = page.locator(".digital-question-scan img");
-    await scan.waitFor();
-    await scan.evaluate((img) => img.decode());
-    assert.ok(await scan.evaluate((img) => img.naturalWidth > 0));
-    await page.getByRole("button", { name: "Answer A", exact: true }).click();
-    await page.waitForTimeout(1200);
-    await page.reload();
-    await page.getByRole("button", { name: "Answer A", exact: true }).waitFor();
-    assert.equal(
-      await page
-        .getByRole("button", { name: "Answer A", exact: true })
-        .getAttribute("aria-pressed"),
-      "true",
-    );
-    await page.getByRole("button", { name: "Source passage and page" }).click();
-    const dialog = page.getByRole("dialog", { name: "Source pages" });
-    await dialog.waitFor();
-    assert.equal(
-      await dialog.evaluate((el) => el.contains(document.activeElement)),
-      true,
-    );
-    await page.keyboard.press("Escape");
-    await dialog.waitFor({ state: "hidden" });
-    console.log("PASS imported image, saved answer, source-page dialog");
-  }
+  const testLinks = page.locator("a.practice-file-row");
+  assert.equal(await testLinks.count(), 10, "Expected ten digital practice tests");
+  await testLinks.first().click();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page.locator(".exam-choice, .exam-input").first().waitFor();
+  assert.equal(await page.locator(".digital-question-scan").count(), 0);
+  assert.equal(await page.getByText("Reading & Writing - Module 1", { exact: true }).count(), 1);
+  console.log("PASS ten native digital tests and first form start");
   assert.deepEqual(errors, [], "Browser errors");
   console.log("PASS browser errors: none");
 } catch (error) {

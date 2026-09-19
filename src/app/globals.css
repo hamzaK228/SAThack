@@ -1772,8 +1772,6 @@ strong {
 /* ---- left sidebar ---- */
 .practice-file-list { border-top: 1px solid var(--border); }
 .digital-exam { display: flex; flex-direction: column; gap: 1rem; }
-.digital-question-scan { max-height: 62dvh; overflow: auto; background: #fff; padding: 12px; }
-.digital-question-scan img { display: block; width: 100%; max-width: 800px; height: auto; margin: 0 auto; }
 .digital-answer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
 .digital-answer-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
 .digital-answer-bar select { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border); padding: 0.5rem; }

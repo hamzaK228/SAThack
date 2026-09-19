@@ -15,7 +15,6 @@ export async function GET() {
     "study_plans",
     "plan_tasks",
     "vocab_progress",
-    "digital_test_progress",
   ];
   const data: Record<string, unknown> = {
     exportedAt: new Date().toISOString(),
@@ -29,7 +28,7 @@ export async function GET() {
         .select("*")
         .eq(table === "profiles" ? "id" : "user_id", user.id);
       const { data: batch, error } = await query
-        .order(table === "digital_test_progress" ? "test_id" : "id")
+        .order("id")
         .range(from, from + 999);
       if (error) {
         console.error("[export]", { table, code: error.code });

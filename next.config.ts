@@ -2,7 +2,6 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  outputFileTracingExcludes: { "/*": ["./Practise tests/**/*"] },
   async headers() {
     const policy = [
       "default-src 'self'",
