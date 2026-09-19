@@ -5,9 +5,9 @@ import { CountUp, Reveal } from "@/components/Reveal";
 import Magnetic from "@/components/Magnetic";
 import DashboardGoals from "@/components/dashboard/DashboardGoals";
 import { ExamCountdown, DaysUntilExam, ExamDateProvider } from "@/components/dashboard/ExamDate";
-import PlanChecklist from "@/components/dashboard/PlanChecklist";
+import WeeklyPlan from "@/components/dashboard/WeeklyPlan";
+import { Suspense } from "react";
 import ContributionGraph from "@/components/dashboard/ContributionGraph";
-import { getStudyPlan } from "@/lib/study-plan-data";
 import { levelFor, streakFrom, xpFor } from "@/lib/gamification";
 
 export const dynamic = "force-dynamic";
@@ -16,14 +16,15 @@ export default async function DashboardHome() {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return null;
+  const userId = user.id;
 
-  const { data: profile } = await supabase
+  const profileQuery = supabase
     .from("profiles")
     .select("full_name, target_score, test_date, current_score")
     .eq("id", user.id)
     .single();
 
-  const { data: diagnostic } = await supabase
+  const diagnosticQuery = supabase
     .from("diagnostics")
     .select("total_score, rw_score, math_score, completed_at")
     .eq("user_id", user.id)
@@ -31,30 +32,35 @@ export default async function DashboardHome() {
     .limit(1)
     .maybeSingle();
 
-  const { count: totalAttempts } = await supabase
-    .from("practice_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id);
-
-  const { count: correctAttempts } = await supabase
-    .from("practice_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("is_correct", true);
-
   // Paginated fetch of attempts (past the 1000-row cap).
-  const attempts: { domain: string | null; is_correct: boolean | null; created_at: string }[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
-      .from("practice_attempts")
-      .select("domain, is_correct, created_at")
-      .eq("user_id", user.id)
-      .range(from, from + PAGE - 1);
-    const rows = (data ?? []) as typeof attempts;
-    attempts.push(...rows);
-    if (rows.length < PAGE) break;
+  async function fetchAttempts() {
+    const attempts: { domain: string | null; is_correct: boolean | null; created_at: string }[] = [];
+    const PAGE = 1000;
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
+        .from("practice_attempts")
+        .select("domain, is_correct, created_at")
+        .eq("user_id", userId)
+        .order("id")
+        .range(from, from + PAGE - 1);
+      const rows = (data ?? []) as typeof attempts;
+      attempts.push(...rows);
+      if (rows.length < PAGE) break;
+    }
+    return attempts;
   }
+
+  const [{ data: profile }, { data: diagnostic }, attempts, { count: testCount }, { count: vocabCount }] = await Promise.all([
+    profileQuery,
+    diagnosticQuery,
+    fetchAttempts(),
+    supabase.from("test_sessions").select("*", { count: "exact", head: true })
+      .eq("user_id", user.id).eq("status", "completed"),
+    supabase.from("vocab_progress").select("*", { count: "exact", head: true })
+      .eq("user_id", user.id).gt("times_seen", 0),
+  ]);
+  const totalAttempts = attempts.length;
+  const correctAttempts = attempts.filter((attempt) => attempt.is_correct).length;
 
   const n = totalAttempts ?? 0;
   const accuracy = n ? Math.round(((correctAttempts ?? 0) / n) * 100) : null;
@@ -70,16 +76,6 @@ export default async function DashboardHome() {
   }
 
   // Gamification summary (derived — no stored state).
-  const { count: testCount } = await supabase
-    .from("test_sessions")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("status", "completed");
-  const { count: vocabCount } = await supabase
-    .from("vocab_progress")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gt("times_seen", 0);
   const activeDays = Object.keys(heatDays).length;
   const { streak } = streakFrom(attempts.map((a) => a.created_at));
   const xp = xpFor({
@@ -90,13 +86,6 @@ export default async function DashboardHome() {
     activeDays,
   });
   const level = levelFor(xp);
-
-  // This week's preview comes from the same AI engine as the Study Plan page,
-  // so the two views can never disagree (see src/lib/study-plan-data.ts).
-  const bundle = await getStudyPlan();
-  if (!bundle) return null;
-  const { plan } = bundle;
-  const thisWeek = plan.tasks.filter((t) => t.week === 1);
 
   return (
     <div className="dash-page">
@@ -220,17 +209,9 @@ export default async function DashboardHome() {
         )}
 
         <Reveal>
-          <div className="dash-card">
-            <div className="dash-plan-head">
-              <h2 className="dash-section-title" style={{ marginBottom: 0 }}>
-                📅 This week&apos;s plan
-              </h2>
-              <Link className="btn btn-ghost" href="/dashboard/plan">
-                Full plan →
-              </Link>
-            </div>
-            <PlanChecklist tasks={thisWeek} done={plan.done} />
-          </div>
+          <Suspense fallback={<div role="status">Loading study plan...</div>}>
+            <WeeklyPlan />
+          </Suspense>
         </Reveal>
 
         <div className="dash-quick-grid">

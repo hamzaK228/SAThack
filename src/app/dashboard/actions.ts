@@ -8,6 +8,23 @@ import { knowledgeForTopic } from "@/lib/ai/knowledge";
 import { chatCompletion } from "@/lib/ai/llm";
 import { applyReview } from "@/lib/vocab";
 import { regenerateStudyPlan } from "@/lib/study-plan-data";
+import { QUESTION_COLUMNS, QUESTION_BATCH_SIZE, type SessionQuestion } from "@/lib/session-questions";
+
+export async function loadSessionQuestions(ids: string[]) {
+  if (!ids.length || ids.length > QUESTION_BATCH_SIZE) throw new Error("Invalid question batch.");
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+  const supabase = await createClient();
+  const [questions, saved] = await Promise.all([
+    supabase.from("questions").select(QUESTION_COLUMNS).eq("is_official", true).in("id", ids),
+    supabase.from("saved_questions").select("question_id").eq("user_id", user.id).in("question_id", ids),
+  ]);
+  if (questions.error || saved.error) throw new Error("Could not load questions.");
+  const byId = new Map((questions.data ?? []).map((question) => [question.id, question]));
+  const ordered = ids.map((id) => byId.get(id));
+  if (ordered.some((question) => !question)) throw new Error("A question is no longer available. Reload the session.");
+  return { questions: ordered as SessionQuestion[], savedIds: (saved.data ?? []).map((row) => row.question_id) };
+}
 
 export async function recordAttempt(input: {
   question_id: string;
@@ -18,12 +35,10 @@ export async function recordAttempt(input: {
   domain: string;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
-  await supabase.from("practice_attempts").insert({
+  const { error } = await supabase.from("practice_attempts").insert({
     user_id: user.id,
     question_id: input.question_id,
     selected_answer: input.selected_answer,
@@ -34,10 +49,8 @@ export async function recordAttempt(input: {
     mode: "drill",
   });
 
-  // Keep the Question Bank (solved/unsolved/missed counts) and the Review Queue
-  // in sync with the freshly recorded attempt.
-  revalidatePath("/dashboard/question-bank");
-  revalidatePath("/dashboard/review");
+  // Dynamic pages read fresh data on navigation; do not reload the active drill.
+  return { ok: !error };
 }
 
 /** Server-side guard rails for the goal editor — mirrors the DB check constraints. */
@@ -105,29 +118,26 @@ export async function updateGoals(input: {
   return { ok: true };
 }
 
-export async function toggleSave(question_id: string) {
+export async function toggleSave(question_id: string, saved: boolean) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
-  const { data: existing } = await supabase
+  if (!saved) {
+    const { error } = await supabase.from("saved_questions").delete()
+      .eq("user_id", user.id).eq("question_id", question_id);
+    return { ok: !error };
+  }
+  const { data: existing, error: readError } = await supabase
     .from("saved_questions")
     .select("id")
     .eq("user_id", user.id)
     .eq("question_id", question_id)
     .maybeSingle();
-
-  if (existing) {
-    await supabase
-      .from("saved_questions")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("question_id", question_id);
-  } else {
-    await supabase.from("saved_questions").insert({ user_id: user.id, question_id });
-  }
+  if (readError) return { ok: false };
+  if (existing) return { ok: true };
+  const { error } = await supabase.from("saved_questions").insert({ user_id: user.id, question_id });
+  return { ok: !error };
 }
 
 export async function startTestSession(): Promise<string | null> {

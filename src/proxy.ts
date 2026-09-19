@@ -49,7 +49,7 @@ export async function proxy(request: NextRequest) {
     });
 
     // Refreshes the auth token and sets refreshed cookies.
-    await supabase.auth.getUser();
+    await supabase.auth.getClaims();
   } catch (error) {
     // Malformed URL, unreachable project, etc. — still don't take the site down.
     warnOnce("[proxy] Supabase session refresh failed; continuing without it.", error);

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import BankFilters from "@/components/dashboard/BankFilters";
 import { computeStatuses } from "@/lib/question-status";
+import { getQuestionCollection, QUESTION_COLLECTIONS } from "@/lib/question-collections";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ type Q = {
 };
 
 type Search = {
+  collection?: string;
   status?: string;
   difficulty?: string;
 };
@@ -49,6 +51,7 @@ export default async function QuestionBankPage({
   if (!user) return null;
 
   const sp = await searchParams;
+  const collection = getQuestionCollection(sp.collection);
   const status =
     sp.status === "solved" || sp.status === "missed" ? sp.status : sp.status === "all" ? "all" : "unsolved";
   const difficulty =
@@ -60,11 +63,13 @@ export default async function QuestionBankPage({
   const questions: Q[] = [];
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
+    let query = supabase
       .from("questions")
       .select("id, section, domain, skill, difficulty")
-      .eq("is_official", true)
-      .range(from, from + PAGE - 1);
+      .eq("is_official", true).order("id");
+    if (collection) query = query.in("source_id", collection.sourceIds);
+    const { data, error } = await query.range(from, from + PAGE - 1);
+    if (error) throw new Error("Could not load the question bank.");
     const rows = (data ?? []) as Q[];
     questions.push(...rows);
     if (rows.length < PAGE) break;
@@ -85,7 +90,7 @@ export default async function QuestionBankPage({
 
   // Per question: answered / solved (correct at least once) / missed (wrong at least once).
   const statuses = computeStatuses(attempts);
-  const answeredCount = statuses.answered.size;
+  const answeredCount = questions.filter((question) => statuses.answered.has(question.id)).length;
 
   type Stat = { total: number; answered: number; solved: number; missed: number };
   const domainStat = new Map<string, Stat>();
@@ -120,6 +125,7 @@ export default async function QuestionBankPage({
 
   const practiceHref = (scope: { section?: string; domain?: string; skill?: string }) => {
     const p = new URLSearchParams();
+    if (collection) p.set("collection", collection.id);
     if (scope.section) p.set("section", scope.section);
     if (scope.domain) p.set("domain", scope.domain);
     if (scope.skill) p.set("skill", scope.skill);
@@ -142,7 +148,7 @@ export default async function QuestionBankPage({
       <div className="dash-head">
         <div>
           <h1 className="dash-title">Question Bank</h1>
-          <p className="dash-sub">Official College Board</p>
+          <p className="dash-sub">{collection?.title ?? "Official College Board"}</p>
         </div>
       </div>
 
@@ -156,7 +162,8 @@ export default async function QuestionBankPage({
         </div>
       </div>
 
-      <BankFilters status={status} difficulty={difficulty} />
+      <BankFilters status={status} difficulty={difficulty} collection={collection?.id ?? ""}
+        collections={QUESTION_COLLECTIONS.map((item) => ({ id: item.id, title: item.title, count: item.sourceIds.length }))} />
 
       {visibleTotal === 0 ? (
         <div className="dash-empty">
@@ -252,4 +259,3 @@ export default async function QuestionBankPage({
     </div>
   );
 }
-

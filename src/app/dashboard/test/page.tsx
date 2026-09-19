@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import TestExam, { type TestModule, type TestQuestion } from "@/components/dashboard/TestExam";
+import PracticeTestLibrary from "@/components/dashboard/PracticeTestLibrary";
 
 export const dynamic = "force-dynamic";
 
@@ -41,27 +42,32 @@ async function pick(
     .slice(0, count) as TestQuestion[];
 }
 
-export default async function TestPage() {
+export default async function TestPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
+  const { mode } = await searchParams;
+  if (mode !== "adaptive") return <div className="dash-page"><PracticeTestLibrary /></div>;
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return null;
 
   // Module 1 (fixed mix) — deterministic via ordered fetch + hash shuffle.
-  const rw1 = pseudoShuffle(await pick(supabase, "reading_writing", 27, null, new Set()));
-  const math1 = pseudoShuffle(await pick(supabase, "math", 22, null, new Set()));
+  const [rwFirst, mathFirst] = await Promise.all([
+    pick(supabase, "reading_writing", 27, null, new Set()),
+    pick(supabase, "math", 22, null, new Set()),
+  ]);
+  const rw1 = pseudoShuffle(rwFirst);
+  const math1 = pseudoShuffle(mathFirst);
 
   const rw1Ids = new Set(rw1.map((q) => q.id));
   const math1Ids = new Set(math1.map((q) => q.id));
 
   // Module 2 variants (adaptive): easy OR hard, chosen after Module 1.
-  const rw2easy = pseudoShuffle(
-    await pick(supabase, "reading_writing", 27, ["easy", "medium"], rw1Ids)
-  );
-  const rw2hard = pseudoShuffle(
-    await pick(supabase, "reading_writing", 27, ["medium", "hard"], rw1Ids)
-  );
-  const math2easy = pseudoShuffle(await pick(supabase, "math", 22, ["easy", "medium"], math1Ids));
-  const math2hard = pseudoShuffle(await pick(supabase, "math", 22, ["medium", "hard"], math1Ids));
+  const variants = await Promise.all([
+    pick(supabase, "reading_writing", 27, ["easy", "medium"], rw1Ids),
+    pick(supabase, "reading_writing", 27, ["medium", "hard"], rw1Ids),
+    pick(supabase, "math", 22, ["easy", "medium"], math1Ids),
+    pick(supabase, "math", 22, ["medium", "hard"], math1Ids),
+  ]);
+  const [rw2easy, rw2hard, math2easy, math2hard] = variants.map(pseudoShuffle);
 
   const m1: TestModule[] = [
     { id: "rw1", section: "reading_writing", label: "Reading & Writing · Module 1", minutes: 32, questions: rw1 },
@@ -100,6 +106,4 @@ export default async function TestPage() {
     </div>
   );
 }
-
-
 

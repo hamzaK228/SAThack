@@ -20,6 +20,9 @@ export default function Footer() {
             <a href="#how">How it works</a>
             <a href="#pricing">Pricing</a>
             <a href="#faq">FAQ</a>
+            <a href="https://github.com/hamzaK228/SAThack" target="_blank" rel="noreferrer">
+              GitHub
+            </a>
           </div>
           <div className="footer-col">
             <h4>Legal</h4>
@@ -38,4 +41,3 @@ export default function Footer() {
     </footer>
   );
 }
-

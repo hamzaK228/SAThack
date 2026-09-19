@@ -13,7 +13,7 @@ export type MathPart =
   | { math: true; value: string }
   | { math: false; value: string };
 
-const MATH_RE = /(\$[^$]+\$)/g;
+const MATH_RE = /(\\\$|\$(?:\\.|[^$\\])+\$)/g;
 
 /** Split text into plain runs and `$...$` math runs. */
 export function splitMath(text: string): MathPart[] {
@@ -24,7 +24,7 @@ export function splitMath(text: string): MathPart[] {
     .map((part) =>
       part.length > 2 && part.startsWith("$") && part.endsWith("$")
         ? ({ math: true, value: part.slice(1, -1) } as const)
-        : ({ math: false, value: part } as const)
+        : ({ math: false, value: part === "\\$" ? "$" : part } as const)
     );
 }
 

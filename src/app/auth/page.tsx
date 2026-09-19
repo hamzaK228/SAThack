@@ -54,7 +54,9 @@ export default function AuthPage() {
     const problems: Partial<Record<FieldKey, string>> = {};
     if (mode === "signup" && fullName.trim().length < 2) problems.fullName = FIELD_MESSAGES.fullName;
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) problems.email = FIELD_MESSAGES.email;
-    if (password.length < 8) problems.password = FIELD_MESSAGES.password;
+    if (mode === "signup" ? password.length < 8 : !password.length) {
+      problems.password = mode === "signup" ? FIELD_MESSAGES.password : "Enter your password.";
+    }
     if (mode === "signup" && confirm !== password) problems.confirm = FIELD_MESSAGES.confirm;
     return problems;
   }, [mode, fullName, email, password, confirm]);
@@ -141,10 +143,11 @@ export default function AuthPage() {
             supabase.from("profiles").select("test_date").eq("id", data.user.id).maybeSingle(),
             supabase
               .from("practice_attempts")
-              .select("*", { count: "exact", head: true })
-              .eq("user_id", data.user.id),
+              .select("id")
+              .eq("user_id", data.user.id).limit(1),
           ]);
-          const fresh = !profile.data?.test_date && (attempts.count ?? 0) === 0;
+          if (profile.error || attempts.error) throw new Error("Could not load your account. Please try again.");
+          const fresh = !profile.data?.test_date && attempts.data?.length === 0;
           router.replace(fresh ? "/onboarding" : "/dashboard");
         }
       }
@@ -246,7 +249,7 @@ export default function AuthPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => blur("password")}
                 aria-invalid={Boolean(fieldError("password"))}
-                minLength={8}
+                minLength={mode === "signup" ? 8 : 1}
                 required
               />
               <button

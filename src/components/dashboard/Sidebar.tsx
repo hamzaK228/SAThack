@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { PanelLeftClose } from "lucide-react";
 
 const nav = [
   { href: "/dashboard", label: "Home", icon: "⌂" },
@@ -22,9 +23,9 @@ const quick = [
   { href: "/dashboard/test", label: "Practice Test", icon: "▣" },
 ];
 
-export default function Sidebar({ email }: { email: string }) {
+export default function Sidebar({ email, onClose, initialOpen = false }: { email: string; onClose: () => void; initialOpen?: boolean }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(initialOpen);
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -45,10 +46,11 @@ export default function Sidebar({ email }: { email: string }) {
       </button>
 
       <aside className={`dash-sidebar${open ? " open" : ""}`}>
-        <Link className="brand dash-brand" href="/dashboard" onClick={() => setOpen(false)}>
+        <div className="dash-sidebar-head"><Link className="brand dash-brand" href="/dashboard" onClick={() => setOpen(false)}>
           <span className="brand-prompt">&gt;</span>
           <span>SAThack</span>
         </Link>
+        <button className="dash-tool" onClick={onClose} title="Close sidebar" aria-label="Close sidebar"><PanelLeftClose size={20} /></button></div>
 
         <nav className="dash-nav" aria-label="Dashboard">
           <span className="dash-nav-label">Menu</span>

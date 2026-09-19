@@ -3,30 +3,24 @@ import { createClient } from "@/lib/supabase/server";
 export default async function RightRail({ userId }: { userId: string }) {
   const supabase = await createClient();
 
-  const { count: total } = await supabase
+  const [{ count: total }, { count: correct }, { data: days }] = await Promise.all([supabase
     .from("practice_attempts")
     .select("*", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId),
 
-  const { count: correct } = await supabase
+  supabase
     .from("practice_attempts")
     .select("*", { count: "exact", head: true })
     .eq("user_id", userId)
-    .eq("is_correct", true);
+    .eq("is_correct", true),
 
-  const { data: recent } = await supabase
+  supabase
     .from("practice_attempts")
     .select("domain, is_correct, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(6);
-
-  const { data: days } = await supabase
-    .from("practice_attempts")
-    .select("created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(120);
+    .limit(120)]);
+  const recent = days?.slice(0, 6);
 
   const n = total ?? 0;
   const c = correct ?? 0;
@@ -65,7 +59,7 @@ export default async function RightRail({ userId }: { userId: string }) {
       </div>
 
       <div className="rail-card">
-        <span className="rail-card-label">Today</span>
+        <span className="rail-card-label">Practice</span>
         <div className="rail-stat-grid">
           <div className="rail-stat">
             <span className="rail-stat-num">{n}</span>
@@ -112,4 +106,3 @@ export default async function RightRail({ userId }: { userId: string }) {
     </aside>
   );
 }
-
