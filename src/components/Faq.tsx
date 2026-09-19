@@ -6,7 +6,7 @@ import { Reveal } from "./Reveal";
 const faqs = [
   {
     q: "Is SAThack free to use?",
-    a: "Yes — speed drills, review queue, and analytics are free. Pro unlocks full-length papers, the AI study plan, and AI explanations.",
+    a: "Yes. Question practice, review, analytics, and study plans are free during development. No paid subscription is currently offered. Tutor messages are limited to 50 per day.",
   },
   {
     q: "How accurate is the score prediction?",
@@ -67,4 +67,3 @@ export default function Faq() {
     </section>
   );
 }
-

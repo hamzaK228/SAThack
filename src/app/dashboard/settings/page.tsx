@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import SettingsForm from "@/components/dashboard/SettingsForm";
 import AIModelForm from "@/components/dashboard/AIModelForm";
+import { availableModels } from "@/lib/ai/models";
+import AccountControls from "@/components/dashboard/AccountControls";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +32,8 @@ export default async function SettingsPage() {
         testDate={profile?.test_date ?? null}
       />
       <div style={{ height: "1.25rem" }} />
-      <AIModelForm current={profile?.ai_model ?? null} />
+      <AIModelForm current={profile?.ai_model ?? null} models={availableModels()} />
+      <AccountControls />
     </div>
   );
 }

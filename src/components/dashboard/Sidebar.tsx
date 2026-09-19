@@ -2,8 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { PanelLeftClose } from "lucide-react";
+import { useDialog } from "@/lib/use-dialog";
+
+const mobileQuery="(max-width: 1100px)";
+const subscribe=(callback:()=>void)=>{const query=window.matchMedia(mobileQuery);query.addEventListener("change",callback);return ()=>query.removeEventListener("change",callback);};
 
 const nav = [
   { href: "/dashboard", label: "Home", icon: "⌂" },
@@ -26,6 +30,8 @@ const quick = [
 export default function Sidebar({ email, onClose, initialOpen = false }: { email: string; onClose: () => void; initialOpen?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(initialOpen);
+  const mobile=useSyncExternalStore(subscribe,()=>window.matchMedia(mobileQuery).matches,()=>false);
+  const dialog=useDialog<HTMLElement>(open && mobile,()=>setOpen(false));
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -45,7 +51,8 @@ export default function Sidebar({ email, onClose, initialOpen = false }: { email
         <span></span>
       </button>
 
-      <aside className={`dash-sidebar${open ? " open" : ""}`}>
+      {open && mobile && <div className="sidebar-scrim" onClick={()=>setOpen(false)} aria-hidden="true"/>}
+      <aside ref={dialog} tabIndex={-1} role={open && mobile ? "dialog" : undefined} aria-modal={open && mobile ? true : undefined} aria-label="Navigation" className={`dash-sidebar${open ? " open" : ""}`}>
         <div className="dash-sidebar-head"><Link className="brand dash-brand" href="/dashboard" onClick={() => setOpen(false)}>
           <span className="brand-prompt">&gt;</span>
           <span>SAThack</span>
@@ -56,6 +63,7 @@ export default function Sidebar({ email, onClose, initialOpen = false }: { email
           <span className="dash-nav-label">Menu</span>
           {nav.map((item) => (
             <Link
+              prefetch={false}
               key={item.href}
               href={item.href}
               className={`dash-nav-link${isActive(item.href) ? " active" : ""}`}
@@ -73,6 +81,7 @@ export default function Sidebar({ email, onClose, initialOpen = false }: { email
           <span className="dash-nav-label">Quick start</span>
           {quick.map((item) => (
             <Link
+              prefetch={false}
               key={item.href}
               href={item.href}
               className="dash-nav-link dash-nav-quick"

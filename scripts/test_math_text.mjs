@@ -24,3 +24,8 @@ test('plain text stays safely escaped', () => {
   assert.equal(mathTextToHtml('<script> & \\$2'), '&lt;script&gt; &amp; $2');
   assert.deepEqual(splitMath('unfinished $x'), [{ math: false, value: 'unfinished $x' }]);
 });
+
+test('screen-reader blank labels do not appear next to printed underscores', () => {
+  assert.equal(mathTextToHtml('around the ______blank When'), 'around the ______ When');
+  assert.equal(mathTextToHtml('Fill in the blank.'), 'Fill in the blank.');
+});

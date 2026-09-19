@@ -2,6 +2,40 @@
 
 Date: 2026-09-19
 
+## Implementation update
+
+The findings below are the original audit, preserved for context. This update supersedes their status.
+
+### Completed
+
+- Server-authoritative grading, deadline enforcement, randomized persistent test forms, transactional completion, and replay protection. Adaptive and diagnostic scores are explicitly practice estimates.
+- Account-owned assessment saves and imported-test progress sync, visible retry states, safe exam exit, and a clock that continues during review and resume.
+- Currency/math rendering fixes, readable graph backgrounds, scrollable passages, Check and Next question controls, full-domain sessions, mobile navigation, and dialog focus handling.
+- Database aggregate summaries replace large question/attempt downloads. Shared progress calculations, unnecessary navigation prefetch removal, immediate sign-in redirect, and immediate landing content reduce avoidable work.
+- Database grants/RLS/index cleanup, protected profile roles, quarantined empty question, AI quotas/model validation, production security headers, and route error boundaries.
+- Password recovery, account export, password-confirmed deletion, sign-out, honest free-tier copy, removal of unsupported testimonials, Privacy/Terms pages, metadata, sitemap, and product screenshot.
+- Production storage catalog, signed asset routes, and a resumable upload script are implemented. Local fallback remains development-only; asset upload is still outstanding.
+
+### Verified locally
+
+- Production build without tracing warnings; TypeScript and ESLint pass.
+- 8 Node tests and 10 Python tests pass. SQL regression tests cover forged grading, role escalation, deadline enforcement, resume, adaptive completion, diagnostic scoring, and replay protection.
+- Chromium checks pass on public pages and 11 dashboard routes at desktop size, plus selected mobile routes at 390px with no horizontal overflow or browser errors.
+- Browser checks verify adaptive answer persistence, review clock, reload/resume, module transition, imported images and answers, and source-dialog focus/Escape.
+- A disposable account verified question Check/Save, persistent goals, export, sign-out, and account deletion. The account was removed and its absence checked in the database.
+- Observed local route loads ranged roughly 50ms to 2.5s. These are local smoke-test timings, not production Core Web Vitals or a speed guarantee.
+
+### Still required before calling the site finished
+
+1. Restore GitHub and Vercel access. Git push has no HTTPS credentials; Vercel access returns 403 for the project scope. No new deployment is claimed.
+2. Upload the 36 local practice PDFs and their generated assets (about 1,065 MiB) with the provided script and a server-only upload credential. The production catalog remains empty until publishing succeeds.
+3. Review imported question text, graph/table placement, options, and answer keys against original sources. Some tests remain scan-backed with imperfect OCR; these are not fully verified native digital tests. Do not invent keys or label them official adaptive scores.
+4. Enable Supabase leaked-password protection; configure production recovery redirect URLs, site URL, AI credentials/model limits, and a production Desmos key if embedding is desired.
+5. Have the site owner review Privacy/Terms, content redistribution rights, student-data handling, and any score/percentile claims before public launch.
+6. Measure production Core Web Vitals, add error monitoring, and continue accessibility/content QA on real devices. The large shared stylesheet and additional payload splitting remain optimization opportunities.
+
+See `DEPLOYMENT.md` for configuration and publishing steps. The original findings follow.
+
 ## Release status
 
 - Local production build, TypeScript, ESLint, 7 Node tests, and 10 Python tests pass.

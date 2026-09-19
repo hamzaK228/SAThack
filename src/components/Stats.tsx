@@ -3,7 +3,7 @@
 import { CountUp, Reveal } from "./Reveal";
 
 const stats = [
-  { value: 3767, label: "real College Board questions", comma: true, suffix: "" },
+  { value: 3766, label: "available College Board questions", comma: true, suffix: "" },
   { value: 8, label: "SAT domains tracked", comma: false, suffix: "" },
   { value: 1915, label: "SAT vocabulary words", comma: true, suffix: "" },
   { value: 4, label: "adaptive modules", comma: false, suffix: "" },
@@ -29,4 +29,3 @@ export default function Stats() {
     </section>
   );
 }
-

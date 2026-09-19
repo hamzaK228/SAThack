@@ -136,10 +136,6 @@ export default function StudySession({ questions: initialQuestions, questionIds,
       const result = await recordAttempt({
         question_id: q.id,
         selected_answer: selected,
-        correct_answer: q.correct_answer,
-        is_correct: isCorrect(selected, q.correct_answer),
-        section: q.section,
-        domain: q.domain,
       });
       if (!result.ok) throw new Error("Attempt could not be saved");
     } catch {

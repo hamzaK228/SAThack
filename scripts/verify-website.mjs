@@ -1,0 +1,177 @@
+import assert from "node:assert/strict";
+import { mkdir } from "node:fs/promises";
+const { chromium } = await import(
+  process.env.PLAYWRIGHT_MODULE || "playwright"
+);
+const base = process.env.TEST_URL || "http://localhost:3001";
+const output = process.env.TEST_OUTPUT || "/tmp/sathack-verification";
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+const errors = [];
+page.on("pageerror", (error) => errors.push(error.message));
+async function visit(path) {
+  const before = Date.now();
+  const response = await page.goto(`${base}${path}`);
+  assert.ok(response.status() < 400, `${path}: HTTP ${response.status()}`);
+  await page.locator("h1").first().waitFor();
+  assert.equal(
+    await page.getByText("Could not load this page", { exact: true }).count(),
+    0,
+    path,
+  );
+  if (
+    await page.evaluate(() => document.documentElement.scrollWidth > innerWidth)
+  ) {
+    await page.screenshot({ path: `${output}/overflow.png` });
+    console.log(
+      await page.evaluate(() =>
+        [...document.querySelectorAll("body *")]
+          .filter((el) => el.getBoundingClientRect().right > innerWidth + 1)
+          .map((el) => ({
+            tag: el.tagName,
+            class: el.className,
+            width: Math.round(el.getBoundingClientRect().width),
+          }))
+          .slice(-20),
+      ),
+    );
+    assert.fail(`${path}: horizontal overflow`);
+  }
+  console.log(`PASS ${path} (${Date.now() - before}ms)`);
+}
+try {
+  for (const route of [
+    "/",
+    "/auth",
+    "/auth/forgot",
+    "/auth/reset",
+    "/privacy",
+    "/terms",
+  ])
+    await visit(route);
+  await page.goto(`${base}/auth`);
+  await page.getByRole("tab", { name: "Sign in", exact: true }).click();
+  await page.getByLabel("Email", { exact: true }).fill(process.env.QA_EMAIL);
+  await page
+    .getByLabel("Password", { exact: true })
+    .fill(process.env.QA_PASSWORD);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.waitForURL(/\/(onboarding|dashboard)/, { timeout: 30000 });
+  console.log("PASS sign in");
+  for (const route of [
+    "/dashboard",
+    "/dashboard/question-bank",
+    "/dashboard/settings",
+    "/dashboard/saved",
+    "/dashboard/review",
+    "/dashboard/analytics",
+    "/dashboard/vocab",
+    "/dashboard/leaderboard",
+    "/dashboard/test",
+    "/dashboard/plan",
+    "/dashboard/tutor",
+  ])
+    await visit(route);
+  await visit("/dashboard/test?mode=adaptive");
+  await page.getByRole("button", { name: /^(Start|Start new test)$/ }).click();
+  await page.locator(".exam-choice, .exam-input").first().waitFor();
+  const question = await page.locator(".exam-stem").innerText();
+  const timeBefore = await page.getByRole("timer").innerText();
+  const firstChoice = page.locator(".exam-choice").first();
+  const saveResponse = page.waitForResponse(
+    (r) =>
+      r.request().method() === "POST" && r.url().includes("/dashboard/test"),
+  );
+  await firstChoice.click();
+  await saveResponse;
+  await page.getByRole("button", { name: "1 of 27", exact: true }).click();
+  await page.getByRole("heading", { name: "Review your answers" }).waitFor();
+  await page.waitForTimeout(1200);
+  assert.notEqual(
+    await page.getByRole("timer").innerText(),
+    timeBefore,
+    "Timer stopped in review",
+  );
+  await page.reload();
+  await page
+    .getByRole("button", { name: "Continue test", exact: true })
+    .click();
+  await page.locator(".exam-choice.selected").waitFor();
+  assert.equal(
+    await page.locator(".exam-stem").innerText(),
+    question,
+    "Resume changed questions",
+  );
+  await page
+    .locator(".exam-shell")
+    .screenshot({ path: `${output}/assessment-desktop.png` });
+  await page.getByRole("button", { name: "1 of 27", exact: true }).click();
+  await page.getByRole("button", { name: "Next module", exact: true }).click();
+  await page
+    .getByText("Reading & Writing - Module 2", { exact: true })
+    .waitFor();
+  console.log("PASS adaptive answers, review clock, resume, module transition");
+  await visit("/dashboard/session?section=math&status=all");
+  await page.locator(".session-question").first().waitFor();
+  await page.screenshot({ path: `${output}/practice-desktop.png` });
+  const check = page.getByRole("button", { name: "Check", exact: true });
+  assert.ok(await check.isVisible());
+  assert.ok(
+    await page.getByRole("button", { name: /next question/i }).isVisible(),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await visit("/dashboard/session?section=reading_writing&status=all");
+  await page.screenshot({ path: `${output}/practice-mobile.png` });
+  for (const route of [
+    "/",
+    "/auth",
+    "/dashboard/question-bank",
+    "/dashboard/settings",
+    "/dashboard/test?mode=adaptive",
+  ])
+    await visit(route);
+  await page.screenshot({ path: `${output}/assessment-mobile.png` });
+  await visit("/dashboard/test");
+  const testLink = page.locator("a.practice-file-row").first();
+  if (await testLink.count()) {
+    await testLink.click();
+    await page.getByRole("button", { name: "Start test", exact: true }).click();
+    const scan = page.locator(".digital-question-scan img");
+    await scan.waitFor();
+    await scan.evaluate((img) => img.decode());
+    assert.ok(await scan.evaluate((img) => img.naturalWidth > 0));
+    await page.getByRole("button", { name: "Answer A", exact: true }).click();
+    await page.waitForTimeout(1200);
+    await page.reload();
+    await page.getByRole("button", { name: "Answer A", exact: true }).waitFor();
+    assert.equal(
+      await page
+        .getByRole("button", { name: "Answer A", exact: true })
+        .getAttribute("aria-pressed"),
+      "true",
+    );
+    await page.getByRole("button", { name: "Source passage and page" }).click();
+    const dialog = page.getByRole("dialog", { name: "Source pages" });
+    await dialog.waitFor();
+    assert.equal(
+      await dialog.evaluate((el) => el.contains(document.activeElement)),
+      true,
+    );
+    await page.keyboard.press("Escape");
+    await dialog.waitFor({ state: "hidden" });
+    console.log("PASS imported image, saved answer, source-page dialog");
+  }
+  assert.deepEqual(errors, [], "Browser errors");
+  console.log("PASS browser errors: none");
+} catch (error) {
+  console.log(
+    "Failed at",
+    page.url(),
+    await page.locator(".feedback, [role=alert]").allTextContents(),
+  );
+  await page.screenshot({ path: `${output}/failure.png` });
+  throw error;
+} finally {
+  await browser.close();
+}

@@ -2,7 +2,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import BankFilters from "@/components/dashboard/BankFilters";
-import { computeStatuses } from "@/lib/question-status";
 import { getQuestionCollection, QUESTION_COLLECTIONS } from "@/lib/question-collections";
 
 export const dynamic = "force-dynamic";
@@ -27,13 +26,8 @@ const DOMAIN_ORDER: Record<string, string[]> = {
   ],
 };
 
-type Q = {
-  id: string;
-  section: string;
-  domain: string;
-  skill: string | null;
-  difficulty: string;
-};
+type Stat = { total: number; answered: number; solved: number; missed: number };
+type Summary = Stat & { section: string; domain: string; skill: string | null; difficulty: string };
 
 type Search = {
   collection?: string;
@@ -59,60 +53,21 @@ export default async function QuestionBankPage({
       ? sp.difficulty
       : "";
 
-  // Fetch ALL official questions (paginate past PostgREST's 1000-row cap).
-  const questions: Q[] = [];
-  const PAGE = 1000;
-  for (let from = 0; ; from += PAGE) {
-    let query = supabase
-      .from("questions")
-      .select("id, section, domain, skill, difficulty")
-      .eq("is_official", true).order("id");
-    if (collection) query = query.in("source_id", collection.sourceIds);
-    const { data, error } = await query.range(from, from + PAGE - 1);
-    if (error) throw new Error("Could not load the question bank.");
-    const rows = (data ?? []) as Q[];
-    questions.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-
-  // Fetch ALL of the user's attempts (paginate past the 1000-row cap too).
-  const attempts: { question_id: string | null; is_correct: boolean | null }[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data } = await supabase
-      .from("practice_attempts")
-      .select("question_id, is_correct")
-      .eq("user_id", user.id)
-      .range(from, from + PAGE - 1);
-    const rows = (data ?? []) as typeof attempts;
-    attempts.push(...rows);
-    if (rows.length < PAGE) break;
-  }
-
-  // Per question: answered / solved (correct at least once) / missed (wrong at least once).
-  const statuses = computeStatuses(attempts);
-  const answeredCount = questions.filter((question) => statuses.answered.has(question.id)).length;
-
-  type Stat = { total: number; answered: number; solved: number; missed: number };
+  const { data, error } = await supabase.rpc("question_bank_summary", { p_sources: collection?.sourceIds ?? null });
+  if (error) throw new Error("Could not load the question bank.");
+  const summaries = (data ?? []) as Summary[];
+  const answeredCount = summaries.reduce((sum,row) => sum + Number(row.answered), 0);
   const domainStat = new Map<string, Stat>();
   const sectionStat = new Map<string, Stat>();
-
-  for (const q of (questions ?? []) as Q[]) {
-    if (difficulty && q.difficulty !== difficulty) continue;
-
-    const dKey = q.domain;
-    const secKey = q.section;
-
-    for (const [key, map] of [
-      [dKey, domainStat],
-      [secKey, sectionStat],
-    ] as [string, Map<string, Stat>][]) {
-      const s = map.get(key) || { total: 0, answered: 0, solved: 0, missed: 0 };
-      s.total += 1;
-      if (statuses.answered.has(q.id)) s.answered += 1;
-      if (statuses.solved.has(q.id)) s.solved += 1;
-      if (statuses.missed.has(q.id)) s.missed += 1;
-      map.set(key, s);
-    }
+  const add = (target: Stat, row: Stat) => {
+    for (const key of ["total","answered","solved","missed"] as const) target[key] += Number(row[key]);
+    return target;
+  };
+  const empty = (): Stat => ({ total: 0, answered: 0, solved: 0, missed: 0 });
+  for (const row of summaries) {
+    if (difficulty && row.difficulty !== difficulty) continue;
+    domainStat.set(row.domain, add(domainStat.get(row.domain) ?? empty(), row));
+    sectionStat.set(row.section, add(sectionStat.get(row.section) ?? empty(), row));
   }
 
   function displayCount(s: Stat | undefined): number {
@@ -135,7 +90,7 @@ export default async function QuestionBankPage({
     return `/dashboard/session${qs ? `?${qs}` : ""}`;
   };
 
-  const totalQuestions = (questions ?? []).length;
+  const totalQuestions = summaries.reduce((sum,row) => sum + Number(row.total), 0);
   const pct = totalQuestions ? Math.round((answeredCount / totalQuestions) * 100) : 0;
   const visibleTotal = SECTION_ORDER.reduce(
     (sum, s) => sum + displayCount(sectionStat.get(s.key)),
@@ -174,7 +129,7 @@ export default async function QuestionBankPage({
           {SECTION_ORDER.map((section) => {
           const domains = (DOMAIN_ORDER[section.key] ?? [])
             .map((domain) => {
-              const skills = (questions ?? [])
+              const skills = summaries
                 .filter(
                   (q) =>
                     q.section === section.key &&
@@ -183,12 +138,7 @@ export default async function QuestionBankPage({
                 )
                 .reduce<Map<string, Stat>>((acc, q) => {
                   const key = q.skill ?? "General";
-                  const s = acc.get(key) || { total: 0, answered: 0, solved: 0, missed: 0 };
-                  s.total += 1;
-                  if (statuses.answered.has(q.id)) s.answered += 1;
-                  if (statuses.solved.has(q.id)) s.solved += 1;
-                  if (statuses.missed.has(q.id)) s.missed += 1;
-                  acc.set(key, s);
+                  acc.set(key, add(acc.get(key) ?? empty(), q));
                   return acc;
                 }, new Map());
 

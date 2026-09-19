@@ -18,7 +18,7 @@ const MATH_RE = /(\\\$|\$(?:\\.|[^$\\])+\$)/g;
 /** Split text into plain runs and `$...$` math runs. */
 export function splitMath(text: string): MathPart[] {
   if (!text) return [];
-  return text
+  return text.replace(/(_{3,})\s*blank\b/gi, "$1")
     .split(MATH_RE)
     .filter((part) => part !== "")
     .map((part) =>

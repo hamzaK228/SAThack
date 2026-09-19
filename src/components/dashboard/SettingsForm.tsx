@@ -28,31 +28,38 @@ export default function SettingsForm({
     setSaved(false);
     setError(null);
 
-    const result = await updateGoals({
-      target_score: target,
-      current_score: current || null,
-      test_date: date || null,
-    });
+    try {
+      const result = await updateGoals({
+        target_score: target,
+        current_score: current || null,
+        test_date: date || null,
+      });
 
-    setSaving(false);
+      if (!result.ok) {
+        setError(result.error ?? "Couldn't save your goals. Please try again.");
+        return;
+      }
 
-    if (!result.ok) {
-      setError(result.error ?? "Couldn't save your goals. Please try again.");
-      return;
+      // Keep the dashboard countdowns in step if they share this page's tree.
+      setTestDate(date || null);
+      setSaved(true);
+      router.refresh();
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      setError(
+        "Couldn't save your goals. Check your connection and try again.",
+      );
+    } finally {
+      setSaving(false);
     }
-
-    // Keep the dashboard countdowns in step if they share this page's tree.
-    setTestDate(date || null);
-    setSaved(true);
-    router.refresh();
-    setTimeout(() => setSaved(false), 2000);
   }
 
   return (
     <div className="dash-card">
       <h2 className="dash-section-title">Goals</h2>
       <p className="dash-sub" style={{ marginBottom: "1rem" }}>
-        Set your current SAT score, target score and test date. Your plan is built around them.
+        Set your current SAT score, target score and test date. Your plan is
+        built around them.
       </p>
       <div className="settings-fields">
         <label className="field">
@@ -98,7 +105,12 @@ export default function SettingsForm({
           {error}
         </p>
       )}
-      <button className="btn btn-primary" onClick={save} disabled={saving} style={{ marginTop: "1.25rem" }}>
+      <button
+        className="btn btn-primary"
+        onClick={save}
+        disabled={saving}
+        style={{ marginTop: "1.25rem" }}
+      >
         {saving ? "Saving…" : saved ? "Saved ✓" : "Save goals"}
       </button>
     </div>

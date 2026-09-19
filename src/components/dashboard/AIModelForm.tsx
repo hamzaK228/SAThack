@@ -1,68 +1,53 @@
 "use client";
-
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { updateAIModel } from "@/app/dashboard/actions";
 
-const MODELS = [
-  { value: "", label: "Default (SAT_AI_MODEL)" },
-  { value: "gpt-4o-mini", label: "GPT-4o mini — cheap & fast", group: "OpenAI" },
-  { value: "gpt-4.1-mini", label: "GPT-4.1 mini", group: "OpenAI" },
-  { value: "gpt-4o", label: "GPT-4o — best quality", group: "OpenAI" },
-  { value: "gpt-4.1", label: "GPT-4.1", group: "OpenAI" },
-  { value: "qwen/qwen3.8-flash", label: "Qwen3.8 Flash — 1M context, agentic ★", group: "Qwen (OpenRouter)" },
-  { value: "qwen/qwen3.8-27b", label: "Qwen3.8 27B — open weights", group: "Qwen (OpenRouter)" },
-  { value: "qwen/qwen3.8-max", label: "Qwen3.8 Max — deepest reasoning", group: "Qwen (OpenRouter)" },
-];
-
-const GROUPS = ["OpenAI", "Qwen (OpenRouter)"] as const;
-
-export default function AIModelForm({ current }: { current: string | null }) {
-  const router = useRouter();
-  const [value, setValue] = useState(current ?? "");
+export default function AIModelForm({
+  current,
+  models,
+}: {
+  current: string | null;
+  models: string[];
+}) {
+  const [value, setValue] = useState(
+    models.includes(current ?? "") ? current! : "",
+  );
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  async function save(v: string) {
-    setValue(v);
+  const [message, setMessage] = useState("");
+  async function save(next: string) {
     setBusy(true);
-    setSaved(false);
-    await updateAIModel(v || null);
-    setBusy(false);
-    setSaved(true);
-    router.refresh();
-    setTimeout(() => setSaved(false), 2000);
+    setMessage("");
+    try {
+      await updateAIModel(next || null);
+      setValue(next);
+      setMessage("Saved");
+    } catch {
+      setMessage("Could not save. Please try again.");
+    } finally {
+      setBusy(false);
+    }
   }
-
   return (
-    <div className="dash-card">
-      <h2 className="dash-section-title">🤖 AI model</h2>
-      <p className="dash-sub" style={{ marginBottom: "1rem" }}>
-        Which model powers your study plan, tutor and lesson generation. OpenAI models need{" "}
-        <code>SAT_AI_API_KEY</code>; the Qwen models are OpenAI-compatible, so point{" "}
-        <code>SAT_AI_BASE_URL</code> at OpenRouter (<code>https://openrouter.ai/api/v1</code>) and use your
-        OpenRouter key. Without a key everything still works offline via the book corpus.
-      </p>
-      <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+    <section>
+      <h2 className="dash-section-title">AI tutor</h2>
+      <label className="field">
+        <span className="field-label">Model</span>
         <select
           className="qb-select"
           value={value}
-          onChange={(e) => save(e.target.value)}
           disabled={busy}
+          onChange={(e) => void save(e.target.value)}
         >
-          <option value="">{MODELS[0].label}</option>
-          {GROUPS.map((g) => (
-            <optgroup key={g} label={g}>
-              {MODELS.filter((m) => m.group === g).map((m) => (
-                <option key={m.value} value={m.value}>
-                  {m.label}
-                </option>
-              ))}
-            </optgroup>
+          <option value="">Default</option>
+          {models.map((model) => (
+            <option key={model} value={model}>
+              {model}
+            </option>
           ))}
         </select>
-        {saved && <span className="feedback ok">Saved ✓</span>}
-      </div>
-    </div>
+      </label>
+      <p className="field-help">Up to 50 tutor messages per day.</p>
+      <p role="status">{message}</p>
+    </section>
   );
 }

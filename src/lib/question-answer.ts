@@ -9,6 +9,7 @@ function toNumber(value: string): number | null {
 }
 
 export function isCorrectAnswer(selected: string, answer: string): boolean {
+  if (!selected.trim() || !answer.trim()) return false;
   return answer.split(/,\s+/).some((accepted) => {
     if (selected.trim().toLowerCase() === accepted.trim().toLowerCase()) return true;
     const actual = toNumber(selected);

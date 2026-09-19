@@ -8,7 +8,7 @@ import { ExamCountdown, DaysUntilExam, ExamDateProvider } from "@/components/das
 import WeeklyPlan from "@/components/dashboard/WeeklyPlan";
 import { Suspense } from "react";
 import ContributionGraph from "@/components/dashboard/ContributionGraph";
-import { levelFor, streakFrom, xpFor } from "@/lib/gamification";
+import { getProgressSummary } from "@/lib/progress-summary";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,6 @@ export default async function DashboardHome() {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return null;
-  const userId = user.id;
 
   const profileQuery = supabase
     .from("profiles")
@@ -32,60 +31,14 @@ export default async function DashboardHome() {
     .limit(1)
     .maybeSingle();
 
-  // Paginated fetch of attempts (past the 1000-row cap).
-  async function fetchAttempts() {
-    const attempts: { domain: string | null; is_correct: boolean | null; created_at: string }[] = [];
-    const PAGE = 1000;
-    for (let from = 0; ; from += PAGE) {
-      const { data } = await supabase
-        .from("practice_attempts")
-        .select("domain, is_correct, created_at")
-        .eq("user_id", userId)
-        .order("id")
-        .range(from, from + PAGE - 1);
-      const rows = (data ?? []) as typeof attempts;
-      attempts.push(...rows);
-      if (rows.length < PAGE) break;
-    }
-    return attempts;
-  }
-
-  const [{ data: profile }, { data: diagnostic }, attempts, { count: testCount }, { count: vocabCount }] = await Promise.all([
-    profileQuery,
-    diagnosticQuery,
-    fetchAttempts(),
-    supabase.from("test_sessions").select("*", { count: "exact", head: true })
-      .eq("user_id", user.id).eq("status", "completed"),
-    supabase.from("vocab_progress").select("*", { count: "exact", head: true })
-      .eq("user_id", user.id).gt("times_seen", 0),
-  ]);
-  const totalAttempts = attempts.length;
-  const correctAttempts = attempts.filter((attempt) => attempt.is_correct).length;
-
-  const n = totalAttempts ?? 0;
-  const accuracy = n ? Math.round(((correctAttempts ?? 0) / n) * 100) : null;
-
-  const name = profile?.full_name?.split(" ")[0] || "there";
-  const isNew = !diagnostic && n === 0;
-
-  // Per-day activity for the contribution graph.
-  const heatDays: Record<string, number> = {};
-  for (const a of attempts) {
-    const key = new Date(a.created_at).toISOString().slice(0, 10);
-    heatDays[key] = (heatDays[key] ?? 0) + 1;
-  }
-
-  // Gamification summary (derived — no stored state).
-  const activeDays = Object.keys(heatDays).length;
-  const { streak } = streakFrom(attempts.map((a) => a.created_at));
-  const xp = xpFor({
-    attempts: n,
-    correct: correctAttempts ?? 0,
-    tests: testCount ?? 0,
-    vocabReviews: vocabCount ?? 0,
-    activeDays,
-  });
-  const level = levelFor(xp);
+  const [{data:profile,error:profileError},{data:diagnostic,error:diagnosticError},progress] = await Promise.all([profileQuery,diagnosticQuery,getProgressSummary()]);
+  if(profileError || diagnosticError) throw new Error("Could not load your dashboard.");
+  const n=progress.attempts;
+  const accuracy=n ? progress.accuracy : null;
+  const name=profile?.full_name?.split(" ")[0] || "there";
+  const isNew=!diagnostic && n===0;
+  const heatDays=progress.days;
+  const {streak,xp,level}=progress;
 
   return (
     <div className="dash-page">

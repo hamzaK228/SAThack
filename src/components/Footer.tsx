@@ -26,8 +26,8 @@ export default function Footer() {
           </div>
           <div className="footer-col">
             <h4>Legal</h4>
-            <a href="#">Terms of Service</a>
-            <a href="#">Privacy Policy</a>
+            <a href="/terms">Terms of Service</a>
+            <a href="/privacy">Privacy Policy</a>
           </div>
         </div>
         <div className="footer-bottom">

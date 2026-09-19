@@ -17,7 +17,7 @@ export default async function DashboardLayout({
 
   return (
     <DashboardShell email={user.email ?? ""} rail={<Suspense fallback={<aside className="dash-rail" aria-busy="true" />}>
-        <RightRail userId={user.id} />
+        <RightRail />
       </Suspense>}>
       {children}
     </DashboardShell>

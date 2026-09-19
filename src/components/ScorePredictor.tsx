@@ -88,8 +88,8 @@ export default function ScorePredictor() {
                 <span className="unit">/ 1600</span>
               </div>
               <div className="result-row">
-                <span className="result-label">Percentile</span>
-                <span className="result-val">{pct >= 99 ? "99th" : `${pct}th`}</span>
+                <span className="result-label">Estimated percentile</span>
+                <span className="result-val">{pct}{pct % 100 >= 11 && pct % 100 <= 13 ? "th" : ({1:"st",2:"nd",3:"rd"} as Record<number,string>)[pct % 10] ?? "th"}</span>
               </div>
               <div className="result-bar">
                 <span style={{ ["--w" as string]: `${barWidth}%` }}></span>
@@ -101,4 +101,3 @@ export default function ScorePredictor() {
     </section>
   );
 }
-

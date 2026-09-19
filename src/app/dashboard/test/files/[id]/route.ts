@@ -2,6 +2,7 @@ import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { getPracticeTests } from "@/lib/practice-tests";
 import { getCurrentUser } from "@/lib/supabase/auth";
+import { createClient } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,12 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   const file = (await getPracticeTests()).find((test) => test.id === id);
   if (!file) return new Response("Not found", { status: 404 });
+  if(file.remote) {
+    const supabase=await createClient();
+    const {data,error}=await supabase.storage.from("practice-tests").createSignedUrl(file.path,3600);
+    if(error)return new Response("File unavailable",{status:503});
+    return new Response(null,{status:307,headers:{Location:data.signedUrl,"Cache-Control":"private, no-store"}});
+  }
   const headers = new Headers({ "Content-Type": "application/pdf", "Accept-Ranges": "bytes",
     "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
     "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}` });

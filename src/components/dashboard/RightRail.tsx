@@ -1,56 +1,19 @@
-import { createClient } from "@/lib/supabase/server";
+import { getProgressSummary } from "@/lib/progress-summary";
 
-export default async function RightRail({ userId }: { userId: string }) {
-  const supabase = await createClient();
-
-  const [{ count: total }, { count: correct }, { data: days }] = await Promise.all([supabase
-    .from("practice_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId),
-
-  supabase
-    .from("practice_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .eq("is_correct", true),
-
-  supabase
-    .from("practice_attempts")
-    .select("domain, is_correct, created_at")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false })
-    .limit(120)]);
-  const recent = days?.slice(0, 6);
-
-  const n = total ?? 0;
-  const c = correct ?? 0;
-  const accuracy = n ? Math.round((c / n) * 100) : 0;
-  const level = Math.floor(n / 20) + 1;
-  const xp = n % 20;
-
-  const activeDays = new Set(
-    (days ?? []).map((d) => new Date(d.created_at).toISOString().slice(0, 10))
-  );
-  let streak = 0;
-  const cursor = new Date();
-  if (!activeDays.has(cursor.toISOString().slice(0, 10))) cursor.setDate(cursor.getDate() - 1);
-  while (activeDays.has(cursor.toISOString().slice(0, 10))) {
-    streak += 1;
-    cursor.setDate(cursor.getDate() - 1);
-  }
-
+export default async function RightRail() {
+  const {attempts:n,accuracy,level,streak,recent}=await getProgressSummary();
   return (
     <aside className="dash-rail">
       <div className="rail-card">
         <div className="rail-level">
           <div>
-            <span className="rail-level-label">Level {level}</span>
+            <span className="rail-level-label">Level {level.level}</span>
             <div className="rail-xp">
               <div className="rail-xp-bar">
-                <span style={{ width: `${(xp / 20) * 100}%` }}></span>
+                <span style={{ width: `${(level.into / level.span) * 100}%` }}></span>
               </div>
               <span className="rail-xp-num">
-                {xp}/20
+                {level.into}/{level.span}
               </span>
             </div>
           </div>

@@ -21,7 +21,7 @@ export default async function SessionPage({ searchParams }: { searchParams: Prom
   let scopeSection = section;
   if (q) {
     const { data, error } = await supabase.from("questions").select("domain, section")
-      .eq("is_official", true).eq("id", q).maybeSingle();
+      .eq("is_official", true).eq("usable",true).eq("id", q).maybeSingle();
     if (error) throw new Error("Could not load this question.");
     if (!data) return <p role="status">Question not found.</p>;
     scopeDomain = data.domain;
@@ -31,7 +31,7 @@ export default async function SessionPage({ searchParams }: { searchParams: Prom
   async function fetchIds() {
     const ids: string[] = [];
     for (let from = 0; ; from += PAGE) {
-      let query = supabase.from("questions").select("id").eq("is_official", true).order("id");
+      let query = supabase.from("questions").select("id").eq("is_official", true).eq("usable",true).order("id");
       if (collection) query = query.in("source_id", collection.sourceIds);
       if (scopeSection) query = query.eq("section", scopeSection);
       if (scopeDomain) query = query.eq("domain", scopeDomain);
