@@ -9,6 +9,12 @@ import {
   Bookmark,
   Calculator,
   BookOpen,
+  Eye,
+  EyeOff,
+  Highlighter,
+  ListX,
+  Maximize2,
+  StickyNote,
   X,
 } from "lucide-react";
 import QuestionText from "@/components/QuestionText";
@@ -41,11 +47,23 @@ export default function AssessmentExam({
   const [remaining, setRemaining] = useState<number | null>(null);
   const [calculator, setCalculator] = useState(false);
   const [reference, setReference] = useState(false);
+  const [timerHidden, setTimerHidden] = useState(false);
+  const [highlighting, setHighlighting] = useState(false);
+  const [eliminating, setEliminating] = useState(false);
+  const [eliminated, setEliminated] = useState<string[]>([]);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notes, setNotes] = useState(() =>
+    typeof window !== "undefined" && initial?.id
+      ? localStorage.getItem(`assessment-notes:${initial.id}`) ?? ""
+      : "",
+  );
   const offset = useRef(0);
   const lock = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
   const version = useRef(0);
   const pane = useRef<HTMLDivElement>(null);
+  const shell = useRef<HTMLDivElement>(null);
+  const passage = useRef<HTMLDivElement>(null);
   const current = session?.module.questions[index];
 
   const adopt = useCallback((next: Assessment) => {
@@ -66,6 +84,7 @@ export default function AssessmentExam({
     );
     setReview(false);
     setSaveState("Saved");
+    setNotes(localStorage.getItem(`assessment-notes:${next.id}`) ?? "");
   }, []);
 
   async function begin(fresh: boolean) {
@@ -173,6 +192,10 @@ export default function AssessmentExam({
         node.scrollTop = 0;
       });
   }, [index, session?.moduleIndex]);
+  useEffect(() => {
+    if (!session?.id) return;
+    localStorage.setItem(`assessment-notes:${session.id}`, notes);
+  }, [notes, session?.id]);
 
   async function advance() {
     if (!session || lock.current) return;
@@ -203,6 +226,43 @@ export default function AssessmentExam({
       setStarted(false);
       router.push("/dashboard/test");
     } catch {setError("Could not save before leaving. Please retry.");lock.current=false;setBusy(false);}
+  }
+
+  async function toggleFullscreen() {
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await shell.current?.requestFullscreen();
+  }
+
+  function toggleMarked() {
+    if (!current) return;
+    setMarked((items) =>
+      items.includes(current.id)
+        ? items.filter((id) => id !== current.id)
+        : [...items, current.id],
+    );
+  }
+
+  function highlightSelection() {
+    if (!highlighting || !passage.current) return;
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) return;
+    const range = selection.getRangeAt(0);
+    if (!passage.current.contains(range.commonAncestorContainer)) return;
+    const mark = document.createElement("mark");
+    mark.className = "exam-highlight";
+    try {
+      mark.append(range.extractContents());
+      range.insertNode(mark);
+      selection.removeAllRanges();
+    } catch {
+      selection.removeAllRanges();
+    }
+  }
+
+  function removeHighlight(event: React.MouseEvent<HTMLDivElement>) {
+    const target = event.target as HTMLElement;
+    if (!target.classList.contains("exam-highlight")) return;
+    target.replaceWith(...target.childNodes);
   }
 
   const feedback = error && (
@@ -308,23 +368,67 @@ export default function AssessmentExam({
     );
   if (!session || !current) return <p role="status">Loading your test...</p>;
   const expired = remaining === 0;
+  const answeredCount = session.module.questions.filter((question) =>
+    answers[question.id]?.trim(),
+  ).length;
   return (
-    <div className="exam-shell">
-      <header className="exam-bar">
-        <span className="exam-module-title">{session.module.label}</span>
-        <span className="exam-timer" role="timer" aria-label="Time remaining">
-          {remaining === null
-            ? "Untimed"
-            : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`}
-        </span>
-        <div className="exam-bar-right">
+    <div className="exam-shell exam-player" ref={shell}>
+      <header className="exam-player-head">
+        <button
+          className={`exam-review-toggle${marked.includes(current.id) ? " marked" : ""}`}
+          aria-pressed={marked.includes(current.id)}
+          onClick={toggleMarked}
+        >
+          Mark for Review
+          <Bookmark size={18} fill={marked.includes(current.id) ? "currentColor" : "none"} />
+        </button>
+        <div className="exam-clock">
+          <span className="exam-timer" role="timer" aria-label="Time remaining">
+            {timerHidden
+              ? "--:--"
+              : remaining === null
+                ? "Untimed"
+                : `${Math.floor(remaining / 60)}:${String(remaining % 60).padStart(2, "0")}`}
+          </span>
+          <button className="exam-text-tool" onClick={() => setTimerHidden((hidden) => !hidden)}>
+            {timerHidden ? "Show" : "Hide"}
+          </button>
+        </div>
+        <div className="exam-tools">
           <span className="field-help" role="status">
             {saveState}
           </span>
+          <button
+            className={`exam-icon-tool${eliminating ? " active" : ""}`}
+            title="Eliminate answers"
+            aria-label="Eliminate answers"
+            aria-pressed={eliminating}
+            onClick={() => setEliminating((active) => !active)}
+          >
+            <ListX size={19} />
+          </button>
+          <button
+            className={`exam-icon-tool${highlighting ? " active" : ""}`}
+            title="Highlight passage"
+            aria-label="Highlight passage"
+            aria-pressed={highlighting}
+            onClick={() => setHighlighting((active) => !active)}
+          >
+            <Highlighter size={19} />
+          </button>
+          <button
+            className={`exam-icon-tool${notesOpen ? " active" : ""}`}
+            title="Notepad"
+            aria-label="Notepad"
+            aria-pressed={notesOpen}
+            onClick={() => setNotesOpen((open) => !open)}
+          >
+            <StickyNote size={19} />
+          </button>
           {current.section === "math" && (
             <>
               <button
-                className="exam-btn"
+                className="exam-icon-tool"
                 title="Calculator"
                 aria-label="Calculator"
                 onClick={() => setCalculator(true)}
@@ -332,7 +436,7 @@ export default function AssessmentExam({
                 <Calculator size={20} />
               </button>
               <button
-                className="exam-btn"
+                className="exam-icon-tool"
                 title="Reference sheet"
                 aria-label="Reference sheet"
                 onClick={() => setReference(true)}
@@ -342,7 +446,15 @@ export default function AssessmentExam({
             </>
           )}
           <button
-            className="exam-btn"
+            className="exam-icon-tool"
+            title="Fullscreen"
+            aria-label="Fullscreen"
+            onClick={() => void toggleFullscreen()}
+          >
+            <Maximize2 size={19} />
+          </button>
+          <button
+            className="exam-icon-tool"
             disabled={busy}
             onClick={()=>void exitTest()}
             aria-label="Exit test"
@@ -352,6 +464,13 @@ export default function AssessmentExam({
           </button>
         </div>
       </header>
+      <div className="exam-module-progress">
+        <span className="exam-module-title">{session.module.label}</span>
+        <span>{answeredCount}/{session.module.questions.length}</span>
+        <div className="exam-progress-track" aria-label={`${answeredCount} of ${session.module.questions.length} answered`}>
+          <span style={{ width: `${(answeredCount / session.module.questions.length) * 100}%` }} />
+        </div>
+      </div>
       {feedback}
       {review ? (
         <div className="exam-review">
@@ -402,7 +521,12 @@ export default function AssessmentExam({
         <div className="exam-body" ref={pane}>
           <div className="exam-panes">
             {(current.passage || current.passage_html) && (
-              <div className="exam-passage">
+              <div
+                className={`exam-passage${highlighting ? " highlighting" : ""}`}
+                ref={passage}
+                onMouseUp={highlightSelection}
+                onClick={removeHighlight}
+              >
                 <QuestionText
                   html={current.passage_html}
                   text={current.passage ?? ""}
@@ -410,28 +534,6 @@ export default function AssessmentExam({
               </div>
             )}
             <div className="exam-question">
-              <div className="exam-qhead">
-                <span className="exam-qnum">{index + 1}</span>
-                <span className="exam-skill">{current.domain}</span>
-                <button
-                  className="exam-btn"
-                  aria-pressed={marked.includes(current.id)}
-                  title="Mark for review"
-                  aria-label="Mark for review"
-                  onClick={() =>
-                    setMarked((m) =>
-                      m.includes(current.id)
-                        ? m.filter((id) => id !== current.id)
-                        : [...m, current.id],
-                    )
-                  }
-                >
-                  <Bookmark
-                    size={19}
-                    fill={marked.includes(current.id) ? "currentColor" : "none"}
-                  />
-                </button>
-              </div>
               <div className="exam-stem">
                 <QuestionText
                   html={current.question_text_html}
@@ -452,39 +554,49 @@ export default function AssessmentExam({
                 />
               ) : (
                 <div className="exam-choices">
-                  {current.choices?.map((c) => (
-                    <button
-                      key={c.label}
-                      className={`exam-choice${answers[current.id] === c.label ? " selected" : ""}`}
-                      aria-pressed={answers[current.id] === c.label}
-                      disabled={expired || busy}
-                      onClick={() =>
-                        setAnswers((a) => ({ ...a, [current.id]: c.label }))
-                      }
-                    >
-                      <span className="exam-choice-label">{c.label}</span>
-                      <span className="exam-choice-text">
-                        <QuestionText html={c.html} text={c.text} />
-                      </span>
-                    </button>
-                  ))}
+                  {current.choices?.map((c) => {
+                    const eliminationId = `${current.id}:${c.label}`;
+                    const crossedOut = eliminated.includes(eliminationId);
+                    return <div className={`exam-choice-wrap${crossedOut ? " eliminated" : ""}`} key={c.label}>
+                      <button
+                        className={`exam-choice${answers[current.id] === c.label ? " selected" : ""}`}
+                        aria-pressed={answers[current.id] === c.label}
+                        disabled={expired || busy || crossedOut}
+                        onClick={() => setAnswers((a) => ({ ...a, [current.id]: c.label }))}
+                      >
+                        <span className="exam-choice-label">{c.label}</span>
+                        <span className="exam-choice-text">
+                          <QuestionText html={c.html} text={c.text} />
+                        </span>
+                      </button>
+                      {eliminating && <button
+                        className="exam-eliminate"
+                        aria-label={`${crossedOut ? "Restore" : "Eliminate"} answer ${c.label}`}
+                        aria-pressed={crossedOut}
+                        onClick={() => setEliminated((items) => items.includes(eliminationId) ? items.filter((id) => id !== eliminationId) : [...items, eliminationId])}
+                      >
+                        {crossedOut ? <Eye size={18} /> : <EyeOff size={18} />}
+                      </button>}
+                    </div>;
+                  })}
                 </div>
               )}
             </div>
           </div>
           <footer className="exam-footer">
             <button
-              className="exam-btn"
+              className="exam-nav-back"
+              aria-label="Previous question"
               disabled={index === 0}
               onClick={() => setIndex((i) => i - 1)}
             >
-              <ArrowLeft size={18} /> Back
+              <ArrowLeft size={18} />
             </button>
-            <button className="exam-btn" onClick={() => setReview(true)}>
-              {index + 1} of {session.module.questions.length}
+            <button className="exam-question-menu" onClick={() => setReview(true)}>
+              Question {index + 1} <span aria-hidden="true">○⌃</span>
             </button>
             <button
-              className="exam-btn"
+              className="exam-next"
               onClick={() =>
                 index === session.module.questions.length - 1
                   ? setReview(true)
@@ -499,6 +611,10 @@ export default function AssessmentExam({
           </footer>
         </div>
       )}
+      {notesOpen && <aside className="exam-notepad" aria-label="Notepad">
+        <header><strong>Notepad</strong><button aria-label="Close notepad" onClick={() => setNotesOpen(false)}><X size={17} /></button></header>
+        <textarea aria-label="Scratch notes" placeholder="Scratch notes..." value={notes} onChange={(event) => setNotes(event.target.value)} />
+      </aside>}
       <DesmosCalculator
         open={calculator}
         onClose={() => setCalculator(false)}

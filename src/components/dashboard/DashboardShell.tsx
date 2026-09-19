@@ -10,10 +10,13 @@ export default function DashboardShell({ email, children, rail }: { email: strin
   const [reopened, setReopened] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  const focusedExam = /^\/dashboard\/test\/[^/]+$/.test(pathname);
   function back() {
     if (window.history.length > 1) router.back();
     else router.push(pathname === "/dashboard" ? "/" : "/dashboard");
   }
+  if (focusedExam) return <main className="exam-focus-main">{children}</main>;
+
   return (
     <div className={`dash-layout${collapsed ? " sidebar-collapsed" : ""}`}>
       {!collapsed && <Sidebar email={email} initialOpen={reopened} onClose={() => setCollapsed(true)} />}

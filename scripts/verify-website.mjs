@@ -90,7 +90,7 @@ try {
   );
   await firstChoice.click();
   await saveResponse;
-  await page.getByRole("button", { name: "1 of 27", exact: true }).click();
+  await page.getByRole("button", { name: /Question 1/ }).click();
   await page.getByRole("heading", { name: "Review your answers" }).waitFor();
   await page.waitForTimeout(1200);
   assert.notEqual(
@@ -111,7 +111,7 @@ try {
   await page
     .locator(".exam-shell")
     .screenshot({ path: `${output}/assessment-desktop.png` });
-  await page.getByRole("button", { name: "1 of 27", exact: true }).click();
+  await page.getByRole("button", { name: /Question 1/ }).click();
   await page.getByRole("button", { name: "Next module", exact: true }).click();
   await page
     .getByText("Reading & Writing - Module 2", { exact: true })
@@ -141,11 +141,47 @@ try {
   const testLinks = page.locator("a.practice-file-row");
   assert.equal(await testLinks.count(), 10, "Expected ten digital practice tests");
   await testLinks.first().click();
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^(Continue test|Start|Start new test)$/ })
+    .first()
+    .waitFor();
+  const startNewTest = page.getByRole("button", {
+    name: "Start new test",
+    exact: true,
+  });
+  const continueTest = page.getByRole("button", {
+    name: "Continue test",
+    exact: true,
+  });
+  if (await startNewTest.count()) await startNewTest.click();
+  else if (await continueTest.count()) await continueTest.click();
+  else await page.getByRole("button", { name: "Start", exact: true }).click();
   await page.locator(".exam-choice, .exam-input").first().waitFor();
+  assert.equal(await page.locator(".dash-sidebar, .dash-rail").count(), 0);
   assert.equal(await page.locator(".digital-question-scan").count(), 0);
   assert.equal(await page.getByText("Reading & Writing - Module 1", { exact: true }).count(), 1);
-  console.log("PASS ten native digital tests and first form start");
+  const markForReview = page.getByRole("button", { name: /Mark for Review/ });
+  await markForReview.click();
+  assert.equal(await markForReview.getAttribute("aria-pressed"), "true");
+  await page.getByRole("button", { name: "Hide", exact: true }).click();
+  assert.equal(await page.getByRole("timer").innerText(), "--:--");
+  await page.getByRole("button", { name: "Show", exact: true }).click();
+  await page.getByRole("button", { name: "Eliminate answers" }).click();
+  await page.getByRole("button", { name: "Eliminate answer A" }).click();
+  assert.equal(await page.locator(".exam-choice-wrap.eliminated").count(), 1);
+  await page.getByRole("button", { name: "Notepad" }).click();
+  await page.getByLabel("Scratch notes").fill("Practice-test verification note");
+  await page.getByRole("button", { name: "Close notepad" }).click();
+  await page.getByRole("button", { name: "Notepad" }).click();
+  assert.equal(
+    await page.getByLabel("Scratch notes").inputValue(),
+    "Practice-test verification note",
+  );
+  assert.equal(
+    await page.evaluate(() => document.documentElement.scrollWidth > innerWidth),
+    false,
+  );
+  console.log("PASS ten native digital tests and focused exam controls");
   assert.deepEqual(errors, [], "Browser errors");
   console.log("PASS browser errors: none");
 } catch (error) {
