@@ -1,12 +1,147 @@
+"use client";
+
 import Link from "next/link";
-import { ArrowRight } from "lucide-react";
+import { motion } from "framer-motion";
+import { useRef } from "react";
+import Terminal from "./Terminal";
+import Magnetic from "./Magnetic";
+import Tilt from "./Tilt";
+
+const EASE = [0.21, 0.47, 0.32, 0.98] as const;
 
 export default function Hero() {
-  return <section className="intro-band" id="top"><div className="wrap">
-    <p className="eyebrow">Digital SAT practice</p>
-    <h1>SAThack</h1>
-    <p className="intro-description">Practice with purpose. Understand your mistakes. Build your next study session around what you need.</p>
-    <div className="intro-actions"><Link className="btn btn-primary btn-lg" href="/auth">Start practicing <ArrowRight size={20}/></Link><a className="btn btn-ghost btn-lg" href="#bank">Explore the question bank</a></div>
-  </div></section>;
-}
+  const ref = useRef<HTMLElement>(null);
 
+  function onMove(e: React.MouseEvent) {
+    const el = ref.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--sx", `${((e.clientX - r.left) / r.width) * 100}%`);
+    el.style.setProperty("--sy", `${((e.clientY - r.top) / r.height) * 100}%`);
+  }
+
+  return (
+    <section className="hero" id="top" ref={ref} onMouseMove={onMove}>
+      <div className="aurora" aria-hidden="true">
+        <div className="aurora-blob a"></div>
+        <div className="aurora-blob b"></div>
+        <div className="aurora-blob c"></div>
+      </div>
+      <div className="hero-grid-bg" aria-hidden="true"></div>
+      <div className="spotlight" aria-hidden="true"></div>
+
+      <div className="wrap hero-grid">
+        <div className="hero-copy">
+          <motion.p
+            className="eyebrow"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, ease: EASE }}
+          >
+            Adaptive Digital SAT platform
+          </motion.p>
+
+          <h1 className="hero-title">
+            <span className="line">
+              The SAT is a system.
+            </span>
+            <span className="line grad">
+              Every system has a hack. Find yours.
+            </span>
+          </h1>
+
+          <motion.p
+            className="hero-sub"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6, ease: EASE }}
+          >
+            SAThack starts with your real score — maps the exact domains costing you points, then
+            rebuilds your plan every time your accuracy shifts.
+          </motion.p>
+
+          <motion.div
+            className="hero-ctas"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.72, ease: EASE }}
+          >
+            <Magnetic>
+              <Link className="btn btn-primary btn-lg" href="/auth">
+                Start free diagnostic →
+              </Link>
+            </Magnetic>
+            <Magnetic strength={0.2}>
+              <a className="btn btn-ghost btn-lg" href="#how">
+                See how it works
+              </a>
+            </Magnetic>
+          </motion.div>
+
+          <motion.ul
+            className="hero-meta"
+            aria-label="Platform facts"
+            initial={false}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.6, delay: 0.86, ease: EASE }}
+          >
+            <li>
+              <strong>3,700+</strong> real College Board questions
+            </li>
+            <li>
+              <strong>8</strong> domains tracked
+            </li>
+            <li>
+              <strong>4</strong> adaptive modules
+            </li>
+          </motion.ul>
+        </div>
+
+        <motion.div
+          className="hero-visual"
+          initial={false}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ duration: 0.85, delay: 0.35, ease: EASE }}
+        >
+          <Tilt>
+            <Terminal />
+          </Tilt>
+
+          <motion.div
+            className="float-card fc-1"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.1, duration: 0.5 }}
+          >
+            <span className="fc-icon">📈</span>
+            <span>
+              Score lift <strong>+270</strong>
+            </span>
+          </motion.div>
+          <motion.div
+            className="float-card fc-2"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.25, duration: 0.5 }}
+          >
+            <span className="fc-icon">⚡</span>
+            <span>
+              Level <strong>12</strong>
+            </span>
+          </motion.div>
+          <motion.div
+            className="float-card fc-3"
+            initial={false}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 1.4, duration: 0.5 }}
+          >
+            <span className="fc-icon">🏆</span>
+            <span>
+              <strong>90%</strong> Algebra mastery
+            </span>
+          </motion.div>
+        </motion.div>
+      </div>
+    </section>
+  );
+}

@@ -1,5 +1,4 @@
 import Header from "@/components/Header";
-import Image from "next/image";
 import Hero from "@/components/Hero";
 import Marquee from "@/components/Marquee";
 import Stats from "@/components/Stats";
@@ -22,9 +21,6 @@ export default function Home() {
       <Header />
       <main id="main">
         <Hero />
-        <section className="practice-preview wrap" aria-label="SAThack practice preview">
-          <Image src="/practice-preview.png" width={858} height={770} alt="SAThack Reading and Writing practice with a passage, answer choices, review marker, and timer" sizes="(max-width: 760px) 100vw, 1000px" priority />
-        </section>
         <Marquee />
         <Stats />
         <HowItWorks />
