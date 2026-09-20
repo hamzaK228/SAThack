@@ -9,6 +9,7 @@ import {
   Heart,
   MessageCircle,
   Plus,
+  Search,
   Send,
   Trash2,
   Users,
@@ -24,7 +25,9 @@ import {
   deleteCommunityPost,
   reportCommunityPost,
   setCommunityMembership,
+  searchCommunityUsers,
   toggleCommunityReaction,
+  type CommunityUserResult,
 } from "@/app/dashboard/community/actions";
 
 export type CommunityGroup = {
@@ -95,6 +98,10 @@ export default function CommunityHub({
   const [groupDialog, setGroupDialog] = useState(false);
   const [replying, setReplying] = useState<string | null>(null);
   const [notice, setNotice] = useState({ text: "", bad: false });
+  const [studentResults, setStudentResults] = useState<CommunityUserResult[]>([]);
+  const [studentSearch, setStudentSearch] = useState("");
+  const [searching, setSearching] = useState(false);
+  const [studentSearched, setStudentSearched] = useState(false);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const groupDialogRef = useDialog<HTMLFormElement>(groupDialog, () => setGroupDialog(false));
   const memberIds = useMemo(() => new Set(memberships.map((item) => item.groupId)), [memberships]);
@@ -163,6 +170,17 @@ export default function CommunityHub({
     );
   }
 
+  async function findStudents(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSearching(true);
+    setNotice({ text: "", bad: false });
+    const result = await searchCommunityUsers(studentSearch);
+    setStudentResults(result.users);
+    setStudentSearched(true);
+    if (!result.ok) setNotice({ text: result.error ?? "Could not search students.", bad: true });
+    setSearching(false);
+  }
+
   return (
     <>
       <header className="community-head">
@@ -220,7 +238,7 @@ export default function CommunityHub({
               <article className="community-post" key={post.id}>
                 <header className="community-post-meta">
                   <span className="community-avatar">{initials(post.author_name)}</span>
-                  <div><strong>{post.author_name}</strong><span suppressHydrationWarning>{relativeTime(post.created_at)}</span></div>
+                  <div><strong>@{post.author_name}</strong><span suppressHydrationWarning>{relativeTime(post.created_at)}</span></div>
                   <span className={`community-kind ${post.kind}`}>{post.kind}</span>
                 </header>
                 <h2>{post.title}</h2>
@@ -241,7 +259,7 @@ export default function CommunityHub({
                     {postComments.map((comment) => (
                       <div className="community-reply" key={comment.id}>
                         <span className="community-avatar small">{initials(comment.author_name)}</span>
-                        <div><p><strong>{comment.author_name}</strong> <time suppressHydrationWarning>{relativeTime(comment.created_at)}</time></p><span>{comment.body}</span></div>
+                        <div><p><strong>@{comment.author_name}</strong> <time suppressHydrationWarning>{relativeTime(comment.created_at)}</time></p><span>{comment.body}</span></div>
                         {comment.author_id === userId && <button aria-label="Delete reply" onClick={() => run(() => deleteCommunityComment(comment.id))}><Trash2 size={14} /></button>}
                       </div>
                     ))}
@@ -264,6 +282,21 @@ export default function CommunityHub({
         </main>
 
         <aside className="community-groups" aria-label="Study groups">
+          <form className="community-user-search" onSubmit={findStudents}>
+            <label htmlFor="community-user-search">Find students</label>
+            <div>
+              <span aria-hidden="true">@</span>
+              <input id="community-user-search" value={studentSearch} onChange={(event) => { setStudentSearch(event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "")); setStudentSearched(false); }} placeholder="username" minLength={2} maxLength={24} required />
+              <button aria-label="Search students" title="Search students" disabled={searching}><Search size={17} /></button>
+            </div>
+            {studentSearched && !searching && (
+              <div className="community-user-results" role="status">
+                {studentResults.length ? studentResults.map((student) => (
+                  <div key={student.id}><span className="community-avatar small">{initials(student.username)}</span><span><strong>@{student.username}</strong><small>{student.full_name}</small></span></div>
+                )) : <small>No matching students.</small>}
+              </div>
+            )}
+          </form>
           <div className="community-groups-head"><div><span>Study groups</span><small>{groups.length} active</small></div><button aria-label="Create group" title="Create group" onClick={() => setGroupDialog(true)}><Plus size={18} /></button></div>
           <div className="community-group-list">
             {groups.map((group) => {

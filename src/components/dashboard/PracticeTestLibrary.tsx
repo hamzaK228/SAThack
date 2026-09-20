@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Check, Clock3, FileCheck2, Monitor, Play, Sparkles } from "lucide-react";
+import { ArrowRight, Check, Clock3, FileCheck2, Monitor, Play, RotateCcw, Sparkles } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 
 export default async function PracticeTestLibrary() {
@@ -17,7 +17,7 @@ export default async function PracticeTestLibrary() {
   return <>
     <div className="practice-library-head"><div><p className="eyebrow">Full-length simulation</p><h1 className="dash-title">Practice Tests</h1>
       <p className="dash-sub">Ten digital SAT forms with timed, adaptive Reading &amp; Writing and Math modules.</p>
-    </div><Link className="btn btn-ghost" href="/dashboard/test?mode=adaptive"><Sparkles size={16} /> Adaptive practice</Link></div>
+    </div><div className="practice-library-actions"><Link className="btn btn-ghost" href="/dashboard/test/review"><RotateCcw size={16} /> Test review</Link><Link className="btn btn-ghost" href="/dashboard/test?mode=adaptive"><Sparkles size={16} /> Adaptive practice</Link></div></div>
     <div className="practice-overview" aria-label="Practice test overview">
       <div><FileCheck2 size={19} /><span><strong>{tests?.length ?? 0}</strong> full tests</span></div>
       <div><Clock3 size={19} /><span><strong>134</strong> minutes</span></div>

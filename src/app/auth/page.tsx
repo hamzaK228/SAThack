@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type Mode = "signup" | "signin";
-type FieldKey = "fullName" | "email" | "password" | "confirm";
+type FieldKey = "fullName" | "username" | "email" | "password" | "confirm";
 
 const FIELD_MESSAGES: Record<FieldKey, string> = {
   fullName: "Tell us your name so your plan can greet you.",
+  username: "Use 3–24 lowercase letters, numbers, or underscores.",
   email: "Enter an email like you@school.com.",
   password: "Use at least 8 characters.",
   confirm: "The two passwords don't match.",
@@ -40,6 +41,7 @@ export default function AuthPage() {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("signup");
   const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -53,13 +55,14 @@ export default function AuthPage() {
   const invalid = useMemo(() => {
     const problems: Partial<Record<FieldKey, string>> = {};
     if (mode === "signup" && fullName.trim().length < 2) problems.fullName = FIELD_MESSAGES.fullName;
+    if (mode === "signup" && !/^[a-z0-9_]{3,24}$/.test(username)) problems.username = FIELD_MESSAGES.username;
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) problems.email = FIELD_MESSAGES.email;
     if (mode === "signup" ? password.length < 8 : !password.length) {
       problems.password = mode === "signup" ? FIELD_MESSAGES.password : "Enter your password.";
     }
     if (mode === "signup" && confirm !== password) problems.confirm = FIELD_MESSAGES.confirm;
     return problems;
-  }, [mode, fullName, email, password, confirm]);
+  }, [mode, fullName, username, email, password, confirm]);
 
   const valid = Object.keys(invalid).length === 0;
 
@@ -95,7 +98,7 @@ export default function AuthPage() {
 
     // Reveal every problem at once if they hit Enter early.
     if (!valid) {
-      setTouched({ fullName: true, email: true, password: true, confirm: true });
+      setTouched({ fullName: true, username: true, email: true, password: true, confirm: true });
       return;
     }
 
@@ -109,11 +112,22 @@ export default function AuthPage() {
       const cleanEmail = email.trim();
 
       if (mode === "signup") {
+        const cleanUsername = username.trim().toLowerCase();
+        const { data: usernameAvailable, error: usernameError } = await supabase.rpc(
+          "is_username_available",
+          { candidate: cleanUsername },
+        );
+        if (usernameError) throw new Error("Could not check that username. Please try again.");
+        if (!usernameAvailable) {
+          setTouched((current) => ({ ...current, username: true }));
+          setError("That username is already taken. Try another one.");
+          return;
+        }
         const { data, error: signUpError } = await supabase.auth.signUp({
           email: cleanEmail,
           password,
           options: {
-            data: { full_name: fullName.trim() },
+            data: { full_name: fullName.trim(), username: cleanUsername },
             emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
           },
         });
@@ -188,22 +202,45 @@ export default function AuthPage() {
 
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           {mode === "signup" && (
-            <label className="field">
-              <span className="field-label">Full name</span>
-              <input
-                className="field-input"
-                type="text"
-                name="name"
-                autoComplete="name"
-                autoFocus
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                onBlur={() => blur("fullName")}
-                aria-invalid={Boolean(fieldError("fullName"))}
-                required
-              />
-              {fieldError("fullName") && <span className="field-error">{fieldError("fullName")}</span>}
-            </label>
+            <>
+              <label className="field">
+                <span className="field-label">Full name</span>
+                <input
+                  className="field-input"
+                  type="text"
+                  name="name"
+                  autoComplete="name"
+                  autoFocus
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  onBlur={() => blur("fullName")}
+                  aria-invalid={Boolean(fieldError("fullName"))}
+                  required
+                />
+                {fieldError("fullName") && <span className="field-error">{fieldError("fullName")}</span>}
+              </label>
+              <label className="field">
+                <span className="field-label">Community username</span>
+                <span className="field-prefixed">
+                  <span aria-hidden="true">@</span>
+                  <input
+                    className="field-input"
+                    type="text"
+                    name="username"
+                    autoComplete="username"
+                    placeholder="your_username"
+                    minLength={3}
+                    maxLength={24}
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, ""))}
+                    onBlur={() => blur("username")}
+                    aria-invalid={Boolean(fieldError("username"))}
+                    required
+                  />
+                </span>
+                {fieldError("username") ? <span className="field-error">{fieldError("username")}</span> : <span className="field-help">Students can find you by this name.</span>}
+              </label>
+            </>
           )}
 
           <label className="field">

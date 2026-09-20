@@ -4,6 +4,8 @@ import SettingsForm from "@/components/dashboard/SettingsForm";
 import AIModelForm from "@/components/dashboard/AIModelForm";
 import { availableModels } from "@/lib/ai/models";
 import AccountControls from "@/components/dashboard/AccountControls";
+import ChangePassword from "@/components/dashboard/ChangePassword";
+import CommunityProfileForm from "@/components/dashboard/CommunityProfileForm";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +16,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("target_score, test_date, current_score, ai_model")
+    .select("target_score, test_date, current_score, ai_model, username")
     .eq("id", user.id)
     .single();
 
@@ -32,6 +34,8 @@ export default async function SettingsPage() {
         testDate={profile?.test_date ?? null}
       />
       <div style={{ height: "1.25rem" }} />
+      <CommunityProfileForm current={profile?.username ?? ""} />
+      <ChangePassword />
       <AIModelForm current={profile?.ai_model ?? null} models={availableModels()} />
       <AccountControls />
     </div>

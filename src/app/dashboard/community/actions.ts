@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 
 type Result = { ok: boolean; error?: string };
+export type CommunityUserResult = { id: string; username: string; full_name: string };
 
 async function communityClient() {
   const user = await getCurrentUser();
@@ -142,4 +143,19 @@ export async function reportCommunityPost(postId: string): Promise<Result> {
   if (error?.code === "23505") return { ok: true };
   if (error) return { ok: false, error: "Could not send the report." };
   return { ok: true };
+}
+
+export async function searchCommunityUsers(queryValue: string): Promise<{
+  ok: boolean;
+  users: CommunityUserResult[];
+  error?: string;
+}> {
+  const query = clean(queryValue, 24).toLowerCase().replace(/^@/, "");
+  if (!/^[a-z0-9_]{2,24}$/.test(query)) {
+    return { ok: false, users: [], error: "Enter at least 2 letters, numbers, or underscores." };
+  }
+  const { supabase } = await communityClient();
+  const { data, error } = await supabase.rpc("search_community_users", { search_query: query });
+  if (error) return { ok: false, users: [], error: "Could not search students." };
+  return { ok: true, users: (data ?? []) as CommunityUserResult[] };
 }
