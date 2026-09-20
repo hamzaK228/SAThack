@@ -364,7 +364,12 @@ def main() -> None:
         with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
             futures = {ex.submit(fetch, item): item for item in todo}
             for i, fut in enumerate(concurrent.futures.as_completed(futures), start=1):
-                q = fut.result()
+                try:
+                    q = fut.result()
+                except Exception:
+                    for pending in futures:
+                        pending.cancel()
+                    raise
                 done[q["external_id"]] = q
                 checkpoint_fh.write(json.dumps(q, ensure_ascii=False) + "\n")
                 if i % 100 == 0:

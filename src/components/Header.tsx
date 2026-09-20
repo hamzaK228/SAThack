@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 const desktopLinks = [
@@ -19,11 +19,20 @@ const mobileLinks = [
   { href: "#faq", label: "FAQ" },
 ];
 
-export default function Header() {
+export default function Header({ signedIn = false }: { signedIn?: boolean }) {
   const [open, setOpen] = useState(false);
+  const header=useRef<HTMLElement>(null);
+  const toggle=useRef<HTMLButtonElement>(null);
+  useEffect(()=>{
+    if(!open)return;
+    const dismiss=(event:KeyboardEvent)=>{if(event.key==="Escape"){setOpen(false);toggle.current?.focus();}};
+    const outside=(event:PointerEvent)=>{if(!header.current?.contains(event.target as Node))setOpen(false);};
+    document.addEventListener("keydown",dismiss);document.addEventListener("pointerdown",outside);
+    return ()=>{document.removeEventListener("keydown",dismiss);document.removeEventListener("pointerdown",outside);};
+  },[open]);
 
   return (
-    <header className="site-header">
+    <header className="site-header" ref={header}>
       <div className="header-inner">
         <a className="brand" href="#top" aria-label="SAThack home">
           <span className="brand-prompt" aria-hidden="true">
@@ -45,13 +54,14 @@ export default function Header() {
           <a className="btn btn-ghost" href="#predictor">
             Score predictor
           </a>
-          <Link className="btn btn-primary" href="/auth">
-            Start now
+          <Link className="btn btn-primary" href={signedIn ? "/dashboard" : "/auth"}>
+            {signedIn ? "Dashboard" : "Start now"}
           </Link>
         </div>
 
         <button
           className="nav-toggle"
+          ref={toggle}
           aria-expanded={open}
           aria-controls="site-nav"
           aria-label="Toggle navigation"

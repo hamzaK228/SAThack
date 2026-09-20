@@ -20,9 +20,13 @@ const DIFFICULTIES = [
 export default function BankFilters({
   status,
   difficulty,
+  collection = "",
+  collections = [],
 }: {
   status: string;
   difficulty: string;
+  collection?: string;
+  collections?: { id: string; title: string; count: number }[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -43,6 +47,11 @@ export default function BankFilters({
 
   return (
     <div className="bank-filters">
+      <select className="qb-select" aria-label="Question collection" value={collection}
+        onChange={(event) => apply({ collection: event.target.value })}>
+        <option value="">All collections</option>
+        {collections.map((item) => <option key={item.id} value={item.id}>{item.title} ({item.count})</option>)}
+      </select>
       <div className="bank-status" role="radiogroup" aria-label="Which questions to practice">
         {STATUSES.map((s) => (
           <button

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useRef } from "react";
 import Terminal from "./Terminal";
 import Magnetic from "./Magnetic";
@@ -9,28 +9,9 @@ import Tilt from "./Tilt";
 
 const EASE = [0.21, 0.47, 0.32, 0.98] as const;
 
-function Words({ text, baseDelay = 0 }: { text: string; baseDelay?: number }) {
-  const words = text.split(" ");
-  return (
-    <>
-      {words.map((word, i) => (
-        <span className="hw" key={`${word}-${i}`}>
-          <motion.span
-            initial={{ opacity: 0, y: 26, filter: "blur(8px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            transition={{ duration: 0.6, delay: baseDelay + i * 0.07, ease: EASE }}
-          >
-            {word}
-            {i < words.length - 1 ? "\u00A0" : ""}
-          </motion.span>
-        </span>
-      ))}
-    </>
-  );
-}
-
-export default function Hero() {
+export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
   const ref = useRef<HTMLElement>(null);
+  const reduceMotion = useReducedMotion();
 
   function onMove(e: React.MouseEvent) {
     const el = ref.current;
@@ -54,25 +35,32 @@ export default function Hero() {
         <div className="hero-copy">
           <motion.p
             className="eyebrow"
-            initial={{ opacity: 0, y: 10 }}
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: EASE }}
           >
             Adaptive Digital SAT platform
           </motion.p>
 
-          <h1 className="hero-title">
+          <motion.h1
+            className="hero-title"
+            initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.68, delay: 0.12, ease: EASE }}
+          >
             <span className="line">
-              <Words text="The SAT is a system." baseDelay={0.06} />
+              The SAT is a system.{" "}
             </span>
             <span className="line grad">
-              <Words text="Every system has a hack. Find yours." baseDelay={0.34} />
+              <span className="hero-title-phrase">Every system{" "}</span>
+              <span className="hero-title-phrase">has a hack.{" "}</span>
+              <span className="hero-title-phrase">Find yours.</span>
             </span>
-          </h1>
+          </motion.h1>
 
           <motion.p
             className="hero-sub"
-            initial={{ opacity: 0, y: 16 }}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.6, ease: EASE }}
           >
@@ -82,13 +70,13 @@ export default function Hero() {
 
           <motion.div
             className="hero-ctas"
-            initial={{ opacity: 0, y: 16 }}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.72, ease: EASE }}
           >
             <Magnetic>
-              <Link className="btn btn-primary btn-lg" href="/auth">
-                Start free diagnostic →
+              <Link className="btn btn-primary btn-lg" href={signedIn ? "/dashboard" : "/auth"}>
+                {signedIn ? "Return to dashboard →" : "Start free diagnostic →"}
               </Link>
             </Magnetic>
             <Magnetic strength={0.2}>
@@ -101,7 +89,7 @@ export default function Hero() {
           <motion.ul
             className="hero-meta"
             aria-label="Platform facts"
-            initial={{ opacity: 0 }}
+            initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.86, ease: EASE }}
           >
@@ -119,7 +107,7 @@ export default function Hero() {
 
         <motion.div
           className="hero-visual"
-          initial={{ opacity: 0, y: 30, scale: 0.96 }}
+          initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.985 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.85, delay: 0.35, ease: EASE }}
         >
@@ -129,7 +117,7 @@ export default function Hero() {
 
           <motion.div
             className="float-card fc-1"
-            initial={{ opacity: 0, y: 10 }}
+            initial={reduceMotion ? false : { opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.1, duration: 0.5 }}
           >
@@ -140,7 +128,7 @@ export default function Hero() {
           </motion.div>
           <motion.div
             className="float-card fc-2"
-            initial={{ opacity: 0, y: 10 }}
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.25, duration: 0.5 }}
           >
@@ -151,7 +139,7 @@ export default function Hero() {
           </motion.div>
           <motion.div
             className="float-card fc-3"
-            initial={{ opacity: 0, y: 10 }}
+            initial={reduceMotion ? false : { opacity: 0, x: -12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.4, duration: 0.5 }}
           >
@@ -165,5 +153,3 @@ export default function Hero() {
     </section>
   );
 }
-
-

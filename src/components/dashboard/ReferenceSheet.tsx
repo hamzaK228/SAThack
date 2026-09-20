@@ -1,4 +1,6 @@
+"use client";
 import MathText from "@/components/MathText";
+import { useDialog } from "@/lib/use-dialog";
 
 const formulas = [
   { k: "Circle", v: "$A=\\pi r^2$" },
@@ -17,9 +19,10 @@ const formulas = [
 ];
 
 export default function ReferenceSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const dialog = useDialog(open,onClose);
   if (!open) return null;
   return (
-    <div className="ref-sheet">
+    <div className="ref-sheet" ref={dialog} role="dialog" aria-modal="true" aria-label="Reference sheet" tabIndex={-1}>
       <div className="ref-sheet-head">
         <span className="ref-sheet-title">Reference sheet</span>
         <button className="ref-sheet-close" onClick={onClose} aria-label="Close reference sheet">
@@ -39,4 +42,3 @@ export default function ReferenceSheet({ open, onClose }: { open: boolean; onClo
     </div>
   );
 }
-

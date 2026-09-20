@@ -45,6 +45,7 @@ from extract_questions import (  # noqa: E402
     GET_QUESTION,
     GET_QUESTIONS,
     GROUPS,
+    clean_latex_text,
     convert_math_in_html,
     post,
 )
@@ -67,7 +68,11 @@ def build_row(meta: dict, detail: dict) -> dict | None:
             html = sanitize_rich(convert_math_in_html(opt.get("content") or ""))
             if html:
                 has_media = True
-            enriched.append({"label": chr(ord("A") + i), "html": html})
+            enriched.append({
+                "label": chr(ord("A") + i),
+                "text": clean_latex_text(opt.get("content") or ""),
+                "html": html,
+            })
         if has_media:
             choices = enriched
 
@@ -99,7 +104,7 @@ def fetch(args) -> None:
                     done.add(json.loads(line)["source_id"])
         print(f"[resume] {len(done)} already cached", file=sys.stderr)
 
-    todo = [item for item in metas if item[1]["external_id"] not in done]
+    todo = [item for item in metas if item[1]["questionId"] not in done]
     print(f"[fetch] {len(todo)} to fetch", file=sys.stderr)
 
     found = 0
@@ -194,8 +199,48 @@ def sql_out(args) -> None:
         fh.write("-- Safe to re-run: it only sets the rich-media columns.\n\n")
         for i in range(0, len(rows), chunk):
             payload = json.dumps(rows[i : i + chunk], ensure_ascii=False).replace("'", "''")
-            fh.write("select public.tmp_apply_question_media('" + payload + "'::jsonb);\n")
+            fh.write(media_update_sql(payload) + "\n")
     print(f"[sql] wrote {len(rows)} rows -> {args.sql_out}", file=sys.stderr)
+
+
+def media_update_sql(escaped_payload: str) -> str:
+    """Apply media directly as an administrator; no public loader is required."""
+    return """
+with updated as (
+  update public.questions q
+     set question_text_html = coalesce(t.question_text_html, q.question_text_html),
+         passage_html = coalesce(t.passage_html, q.passage_html),
+         choices = coalesce(t.choices, q.choices)
+    from jsonb_to_recordset('%s'::jsonb) as t(
+      source_id text, question_text_html text, passage_html text, choices jsonb
+    )
+   where q.source_id = t.source_id and q.is_official = true
+  returning q.id
+)
+select count(*) as updated from updated;
+""" % escaped_payload
+
+
+def cache_from_bank(args) -> None:
+    with open(args.from_bank, encoding="utf-8") as fh:
+        data = [json.loads(line) for line in fh if line.strip()] if args.from_bank.endswith(".jsonl") else json.load(fh)
+        questions = data if isinstance(data, list) else data["questions"]
+    rows = []
+    for q in questions:
+        choices = q.get("choices")
+        if not (q.get("stem_html") or q.get("stimulus_html") or
+                any(c.get("html") for c in choices or [])):
+            continue
+        rows.append({
+            "source_id": q["id"],
+            "question_text_html": q.get("stem_html"),
+            "passage_html": q.get("stimulus_html"),
+            "choices": choices,
+        })
+    with open(args.cache, "w", encoding="utf-8") as fh:
+        for row in rows:
+            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+    print(f"[cache] {len(rows)} media questions -> {args.cache}", file=sys.stderr)
 
 
 RPC_SQL = """
@@ -236,6 +281,7 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     parser.add_argument("--fetch", action="store_true", help="fetch question media into the cache")
+    parser.add_argument("--from-bank", help="build the media cache from an extracted question-bank JSON")
     parser.add_argument("--push", action="store_true", help="push the cache to Supabase")
     parser.add_argument("--sql-out", help="write the cache as SQL instead of pushing")
     parser.add_argument("--cache", default="question-media.jsonl", help="cache file path")
@@ -250,11 +296,13 @@ def main() -> None:
         print(DROP_RPC_SQL)
     if args.fetch:
         fetch(args)
+    if args.from_bank:
+        cache_from_bank(args)
     if args.push:
         push(args)
     if args.sql_out:
         sql_out(args)
-    if not (args.fetch or args.push or args.sql_out or args.print_rpc_sql or args.print_drop_sql):
+    if not (args.fetch or args.from_bank or args.push or args.sql_out or args.print_rpc_sql or args.print_drop_sql):
         parser.print_help()
 
 

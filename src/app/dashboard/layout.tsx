@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/lib/supabase/auth";
-import Sidebar from "@/components/dashboard/Sidebar";
+import DashboardShell from "@/components/dashboard/DashboardShell";
 import RightRail from "@/components/dashboard/RightRail";
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -15,10 +16,10 @@ export default async function DashboardLayout({
   if (!user) redirect("/auth");
 
   return (
-    <div className="dash-layout">
-      <Sidebar email={user.email ?? ""} />
-      <main className="dash-main">{children}</main>
-      <RightRail userId={user.id} />
-    </div>
+    <DashboardShell email={user.email ?? ""} rail={<Suspense fallback={<aside className="dash-rail" aria-busy="true" />}>
+        <RightRail />
+      </Suspense>}>
+      {children}
+    </DashboardShell>
   );
 }

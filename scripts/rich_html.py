@@ -150,12 +150,11 @@ class _Sanitizer(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
-        self.stack: list[tuple[str, bool]] = []  # (tag, inside_svg)
+        self.stack: list[tuple[str, bool, bool]] = []
         self.svg_depth = 0
         self.drop_depth = 0
 
-    def _attrs(self, attrs, in_svg: bool) -> str:
-        parent = self.stack[-1][0] if self.stack else ""
+    def _attrs(self, tag: str, attrs, in_svg: bool) -> str:
         out: list[str] = []
         for raw_name, value in attrs:
             if value is None:
@@ -182,7 +181,7 @@ class _Sanitizer(HTMLParser):
                     continue
                 name = SVG_ATTR_CANON.get(name, name)
             else:
-                if name not in HTML_ATTRS_ANY and name not in HTML_ATTRS_BY_TAG.get(parent, set()):
+                if name not in HTML_ATTRS_ANY and name not in HTML_ATTRS_BY_TAG.get(tag, set()):
                     continue
                 if BAD_URL_RE.match(value.strip()):
                     continue
@@ -196,12 +195,13 @@ class _Sanitizer(HTMLParser):
         return (" " + " ".join(out)) if out else ""
 
     def _emit(self, tag: str, attrs, self_closing: bool) -> None:
-        in_svg = tag in ALLOWED_IN_SVG
-        attrs_html = self._attrs(attrs, in_svg)
+        in_svg = tag == "svg" or self.svg_depth > 0
+        attrs_html = self._attrs(tag, attrs, in_svg)
+        name = SVG_TAG_CANON.get(tag, tag) if in_svg else tag
         if self_closing or tag in VOID:
-            self.parts.append(f"<{tag}{attrs_html}/>" if self_closing else f"<{tag}{attrs_html}>")
+            self.parts.append(f"<{name}{attrs_html}/>" if self_closing else f"<{name}{attrs_html}>")
             return
-        self.parts.append(f"<{tag}{attrs_html}>")
+        self.parts.append(f"<{name}{attrs_html}>")
         self.stack.append((tag, in_svg, True))
         if tag == "svg":
             self.svg_depth += 1
@@ -225,7 +225,7 @@ class _Sanitizer(HTMLParser):
                 self.drop_depth += 1
             return
         tag = tag.lower()
-        if tag in DROP_SUBTREE:
+        if tag in DROP_SUBTREE and not (self.svg_depth > 0 and tag == "title"):
             self.drop_depth = 1
             return
         in_svg = self.svg_depth > 0
@@ -235,7 +235,7 @@ class _Sanitizer(HTMLParser):
         if tag not in allowed:
             self.stack.append((tag, in_svg, False))  # unknown wrapper: keep its children
             return
-        self._emit(SVG_TAG_CANON.get(tag, tag) if in_svg else tag, attrs, False)
+        self._emit(tag, attrs, False)
 
     def handle_startendtag(self, tag: str, attrs) -> None:
         if self.drop_depth:
@@ -247,7 +247,7 @@ class _Sanitizer(HTMLParser):
         allowed = ALLOWED_IN_SVG if in_svg else (ALLOWED_OUTSIDE_SVG | {"svg"})
         if tag not in allowed:
             return
-        self._emit(SVG_TAG_CANON.get(tag, tag) if in_svg else tag, attrs, True)
+        self._emit(tag, attrs, True)
 
     def handle_endtag(self, tag: str) -> None:
         tag = tag.lower()
@@ -260,7 +260,7 @@ class _Sanitizer(HTMLParser):
             # Only close what we actually opened: dropped wrappers (and tags that
             # never matched an allowlist) must not leak stray end tags.
             if emitted:
-                in_svg = open_tag in ALLOWED_IN_SVG
+                in_svg = was_svg
                 name = SVG_TAG_CANON.get(open_tag, open_tag) if in_svg else open_tag
                 self.parts.append(f"</{name}>")
             # SVG context is entered/left by <svg> alone — closing </g>, </path>

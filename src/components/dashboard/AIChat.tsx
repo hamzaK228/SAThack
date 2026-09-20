@@ -29,9 +29,11 @@ export default function AIChat() {
     if (!text) setInput("");
     setMessages((m) => [...m, { role: "user", text: q }]);
     setBusy(true);
-    const answer = await askAI({ question: q });
-    setBusy(false);
-    setMessages((m) => [...m, { role: "ai", text: answer }]);
+    try {
+      const answer = await askAI({ question: q });
+      setMessages((m) => [...m, { role: "ai", text: answer }]);
+    } catch { setMessages(m=>[...m,{role:"ai",text:"Could not reach the tutor. Please try again."}]); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -58,6 +60,8 @@ export default function AIChat() {
       <div className="ai-chat-input">
         <input
           className="field-input"
+          aria-label="Message to tutor"
+          maxLength={4000}
           placeholder="Ask anything about the SAT…"
           value={input}
           onChange={(e) => setInput(e.target.value)}

@@ -334,6 +334,21 @@ strong {
     margin-left: 0;
   }
 }
+@media (max-width: 360px) {
+  .header-inner {
+    gap: 0.5rem;
+  }
+  .header-actions {
+    gap: 0.35rem;
+  }
+  .header-actions .btn-primary {
+    padding: 0.72rem 0.85rem;
+    font-size: 0.8rem;
+  }
+  .brand {
+    font-size: 1rem;
+  }
+}
 
 /* ==========================================================================
    Hero
@@ -369,6 +384,10 @@ strong {
 }
 .hero-title .line {
   display: block;
+}
+.hero-title-phrase {
+  display: block;
+  white-space: nowrap;
 }
 .hero-title .grad {
   background: linear-gradient(100deg, var(--signal), var(--signal-2) 50%, var(--violet));
@@ -1278,7 +1297,7 @@ strong {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-faint);
+  color: var(--ink-dim);
   margin-bottom: 0.4rem;
 }
 .footer-col a {
@@ -1296,7 +1315,7 @@ strong {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  color: var(--ink-faint);
+  color: var(--ink-dim);
   font-size: 0.75rem;
 }
 @media (max-width: 720px) {
@@ -1751,6 +1770,62 @@ strong {
 }
 
 /* ---- left sidebar ---- */
+.practice-file-list { border-top: 1px solid var(--border); }
+.digital-exam { display: flex; flex-direction: column; gap: 1rem; }
+.digital-answer-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+.digital-answer-bar label { display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; }
+.digital-answer-bar select { background: var(--bg-2); color: var(--ink); border: 1px solid var(--border); padding: 0.5rem; }
+.digital-choice-row { display: grid; grid-template-columns: repeat(4, 48px); gap: 0.5rem; }
+.digital-choice-row .exam-choice { width: 48px; height: 48px; padding: 0; justify-content: center; }
+.digital-exam .exam-footer { position: sticky; bottom: 0; background: var(--bg); }
+.digital-source { width: min(95vw, 1000px); max-height: 95dvh; overflow: auto; background: var(--bg); padding: 1rem; }
+.digital-source .pdf-controls { position: sticky; top: 0; background: var(--bg); padding: 0.5rem; }
+.digital-source img { width: 100%; height: auto; display: block; background: #fff; }
+.digital-result-list > div { display: grid; grid-template-columns: minmax(0,1fr) auto 36px; gap: 1rem; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border); }
+.practice-file-row { display: grid; grid-template-columns: 20px minmax(0, 1fr) auto 18px; align-items: center; gap: 0.8rem; padding: 1rem 0; border-bottom: 1px solid var(--border); color: var(--ink); text-decoration: none; }
+.practice-file-row:hover { color: var(--accent); }
+.practice-file-row span { overflow-wrap: anywhere; }
+.practice-file-row small { color: var(--ink-faint); }
+.pdf-practice { display: flex; flex-direction: column; gap: 1rem; }
+.pdf-title { font-size: 1.4rem; line-height: 1.4; overflow-wrap: anywhere; }
+.pdf-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; }
+.practice-pdf { width: 100%; height: 75dvh; min-height: 360px; border: 1px solid var(--border); background: #fff; }
+.practice-notes { min-height: 140px; resize: vertical; }
+@media (max-width: 520px) { .practice-file-row { grid-template-columns: 20px minmax(0, 1fr) 18px; } .practice-file-row small { grid-column: 2; grid-row: 2; } }
+.dash-layout.sidebar-collapsed {
+  grid-template-columns: minmax(0, 1fr) 260px;
+}
+.dash-toolbar,
+.dash-sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.dash-toolbar {
+  margin-bottom: 1rem;
+}
+.dash-sidebar-head {
+  justify-content: space-between;
+}
+.dash-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-2);
+  color: var(--ink);
+  cursor: pointer;
+}
+.dash-tool:hover { background: var(--bg-elev); }
+.dash-tool:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 1100px) {
+  .dash-layout.sidebar-collapsed { grid-template-columns: minmax(0, 1fr); }
+}
 .dash-sidebar {
   position: sticky;
   top: 0;
@@ -2278,17 +2353,24 @@ strong {
 .rich figure:first-child {
   margin: 0;
 }
-.rich svg {
+.rich svg:not(.katex svg) {
   display: block;
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+  background: #fff;
+  color: #111;
+  padding: 8px;
+  box-sizing: border-box;
 }
 .rich img {
   display: block;
   max-width: 100%;
   height: auto;
   margin: 0 auto;
+  background: #fff;
+  padding: 8px;
+  box-sizing: border-box;
 }
 .rich table {
   border-collapse: collapse;
@@ -2472,8 +2554,21 @@ strong {
   line-height: 1.6;
 }
 
+.session-card:not(.session-card-split) {
+  max-height: 68dvh;
+  overflow: auto;
+}
+.session-question-pane > * {
+  flex-shrink: 0;
+}
 .session-actions {
   display: flex;
+  position: sticky;
+  bottom: 0;
+  padding: 0.75rem 0;
+  background: var(--bg);
+  z-index: 2;
+  flex-wrap: wrap;
   gap: 0.7rem;
   justify-content: flex-end;
 }
@@ -5426,6 +5521,17 @@ strong {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .aurora-blob,
+  .hero-terminal,
+  .float-card,
+  .marquee-track,
+  .brand-cursor,
+  .terminal-cursor {
+    animation: none;
+  }
   .level-badge,
   .checklist-bar > span::after,
   .badge-icon,
@@ -5445,14 +5551,16 @@ strong {
 .session-panes {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 6px minmax(0, 1fr);
-  min-height: 360px;
-  max-height: 68vh;
+  grid-template-rows: minmax(0, 1fr);
+  height: min(68dvh, 720px);
+  min-height: 0;
 }
 .session-passage-pane,
 .session-question-pane {
   padding: 1.4rem;
   overflow-y: auto;
   min-width: 0;
+  min-height: 0;
 }
 .session-passage-pane {
   background: var(--bg);
@@ -5491,10 +5599,12 @@ strong {
     grid-template-rows: minmax(0, auto) 6px minmax(0, auto);
     max-height: none;
     min-height: 0;
+    height: auto;
   }
   .session-passage-pane,
   .session-question-pane {
-    overflow: visible;
+    max-height: 55dvh;
+    overflow: auto;
   }
 }
 
@@ -5515,4 +5625,3 @@ strong {
   color: var(--signal);
   background: rgba(198, 255, 74, 0.08);
 }
-

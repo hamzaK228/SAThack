@@ -2,7 +2,7 @@ import { Reveal } from "./Reveal";
 
 const domains = [
   { icon: "🧮", name: "Algebra", count: 615, tone: "lime" },
-  { icon: "📈", name: "Advanced Math", count: 538, tone: "cyan" },
+  { icon: "📈", name: "Advanced Math", count: 537, tone: "cyan" },
   { icon: "🧩", name: "Problem-Solving & Data", count: 421, tone: "violet" },
   { icon: "📐", name: "Geometry & Trigonometry", count: 348, tone: "pink" },
   { icon: "🔍", name: "Information & Ideas", count: 555, tone: "lime" },
@@ -22,7 +22,7 @@ export default function QuestionBank() {
               Every question, <span className="grad">organized for you</span>
             </h2>
             <p className="section-sub">
-              3,767 real College Board questions, sorted into the 8 SAT domains — so you practice
+              3,766 available College Board questions, sorted into the 8 SAT domains — so you practice
               exactly what&apos;s costing you points.
             </p>
           </Reveal>

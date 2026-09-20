@@ -1,50 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import MathText from "@/components/MathText";
 import QuestionText from "@/components/QuestionText";
 import ReferenceSheet from "./ReferenceSheet";
-import DesmosCalculator from "./DesmosCalculator";
-import Tutor from "./Tutor";
-import { recordAttempt, toggleSave } from "@/app/dashboard/actions";
+const DesmosCalculator = dynamic(() => import("./DesmosCalculator"));
+const Tutor = dynamic(() => import("./Tutor"));
+import { loadSessionQuestions, recordAttempt, toggleSave } from "@/app/dashboard/actions";
+import { QUESTION_BATCH_SIZE, type SessionQuestion } from "@/lib/session-questions";
+import { isCorrectAnswer as isCorrect } from "@/lib/question-answer";
 
-type Choice = { label: string; text: string; html?: string | null };
-type Question = {
-  id: string;
-  section: string;
-  domain: string;
-  skill: string | null;
-  difficulty: string;
-  is_grid_in: boolean;
-  question_text: string;
-  question_text_html?: string | null;
-  passage: string | null;
-  passage_html?: string | null;
-  choices: Choice[] | null;
-  correct_answer: string;
-  explanation: string | null;
-};
-
-function toNumber(s: string): number | null {
-  const t = s.trim();
-  const n = Number(t);
-  if (!Number.isNaN(n)) return n;
-  const m = t.match(/^(-?\d+)\s*\/\s*(\d+)$/);
-  if (m) return Number(m[1]) / Number(m[2]);
-  return null;
-}
-
-function isCorrect(selected: string, answer: string): boolean {
-  const a = selected.trim().toLowerCase();
-  const b = answer.trim().toLowerCase();
-  if (a === b) return true;
-  const na = toNumber(selected);
-  const nb = toNumber(answer);
-  if (na !== null && nb !== null) return Math.abs(na - nb) < 1e-6;
-  return false;
-}
-
-export default function StudySession({ questions }: { questions: Question[] }) {
+export default function StudySession({ questions: initialQuestions, questionIds, initialSavedIds = [] }: {
+  questions: SessionQuestion[]; questionIds: string[]; initialSavedIds?: string[];
+}) {
+  const [questions, setQuestions] = useState(initialQuestions);
+  const loadedCount = useRef(initialQuestions.length);
+  const batchPromise = useRef<Promise<void> | null>(null);
+  const [advancing, setAdvancing] = useState(false);
+  const advancingRef = useRef(false);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
   const [checked, setChecked] = useState(false);
@@ -52,9 +26,32 @@ export default function StudySession({ questions }: { questions: Question[] }) {
   const [showRef, setShowRef] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
   const [showTutor, setShowTutor] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [savedIds, setSavedIds] = useState(() => new Set(initialSavedIds));
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const currentId = useRef(questions[0]?.id);
   const [highlightOn, setHighlightOn] = useState(false);
   const passageRef = useRef<HTMLDivElement>(null);
+
+  const loadMore = useCallback(() => {
+    if (batchPromise.current) return batchPromise.current;
+    const ids = questionIds.slice(loadedCount.current, loadedCount.current + QUESTION_BATCH_SIZE);
+    if (!ids.length) return Promise.resolve();
+    const promise = loadSessionQuestions(ids).then((batch) => {
+      loadedCount.current += batch.questions.length;
+      setQuestions((previous) => previous.concat(batch.questions));
+      setSavedIds((previous) => new Set([...previous, ...batch.savedIds]));
+    }).finally(() => { batchPromise.current = null; });
+    batchPromise.current = promise;
+    return promise;
+  }, [questionIds]);
+
+  useEffect(() => {
+    if (index >= questions.length - 5 && questions.length < questionIds.length) {
+      void loadMore().catch(() => { /* Next retries a failed background request. */ });
+    }
+  }, [index, questions.length, questionIds.length, loadMore]);
 
   useEffect(() => {
     const t = window.setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -70,14 +67,15 @@ export default function StudySession({ questions }: { questions: Question[] }) {
   if (questions.length === 0) {
     return (
       <div className="dash-card">
-        <p>No questions available yet. The question bank is empty.</p>
+        <p>No questions match this session.</p>
       </div>
     );
   }
 
   const q = questions[index];
+  const saved = savedIds.has(q.id);
   const correct = checked && selected !== null ? isCorrect(selected, q.correct_answer) : null;
-  const progress = Math.round(((index + (checked ? 1 : 0)) / questions.length) * 100);
+  const progress = Math.round(((index + (checked ? 1 : 0)) / questionIds.length) * 100);
   const isRW = q.section === "reading_writing";
 
   // Shared answer + feedback blocks, rendered either in the two-pane R&W layout
@@ -130,29 +128,71 @@ export default function StudySession({ questions }: { questions: Question[] }) {
     </div>
   );
 
-  function check() {
-    if (selected === null || checked) return;
+  async function check() {
+    if (!selected?.trim() || checked) return;
+    setActionError(null);
     setChecked(true);
-    recordAttempt({
-      question_id: q.id,
-      selected_answer: selected,
-      correct_answer: q.correct_answer,
-      is_correct: isCorrect(selected, q.correct_answer),
-      section: q.section,
-      domain: q.domain,
-    });
+    try {
+      const result = await recordAttempt({
+        question_id: q.id,
+        selected_answer: selected,
+      });
+      if (!result.ok) throw new Error("Attempt could not be saved");
+    } catch {
+      setActionError("Your answer could not be saved. Check your connection and try again.");
+      if (currentId.current === q.id) setChecked(false);
+    }
   }
 
-  function next() {
+  async function next() {
+    if (advancingRef.current) return;
+    const nextIndex = index < questionIds.length - 1 ? index + 1 : 0;
+    if (nextIndex >= loadedCount.current) {
+      advancingRef.current = true;
+      setAdvancing(true);
+      try {
+        await loadMore();
+      } catch {
+        setActionError("Could not load the next question. Please try again.");
+        return;
+      } finally {
+        advancingRef.current = false;
+        setAdvancing(false);
+      }
+    }
     setSelected(null);
     setChecked(false);
-    setSaved(false);
-    setIndex((i) => Math.min(i + 1, questions.length - 1));
+    setActionError(null);
+    currentId.current = questionIds[nextIndex];
+    setIndex(nextIndex);
   }
 
-  function save() {
-    setSaved((v) => !v);
-    toggleSave(q.id);
+  async function save() {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setActionError(null);
+    const id = q.id;
+    const desired = !saved;
+    function updateSaved(value: boolean) {
+      setSavedIds((previous) => {
+        const updated = new Set(previous);
+        if (value) updated.add(id);
+        else updated.delete(id);
+        return updated;
+      });
+    }
+    updateSaved(desired);
+    try {
+      const result = await toggleSave(id, desired);
+      if (!result.ok) throw new Error("Save failed");
+    } catch {
+      updateSaved(!desired);
+      setActionError("The question could not be saved. Please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
   }
 
   function toggleFullscreen() {
@@ -196,7 +236,7 @@ export default function StudySession({ questions }: { questions: Question[] }) {
       <div className="session-top">
         <div className="session-meta">
           <span className="session-qnum">
-            Question {index + 1}/{questions.length}
+            Question {index + 1}/{questionIds.length}
           </span>
           <span className="session-chip">{q.difficulty}</span>
           <span className="session-chip">{q.domain}</span>
@@ -237,8 +277,8 @@ export default function StudySession({ questions }: { questions: Question[] }) {
 
       <ReferenceSheet open={showRef} onClose={() => setShowRef(false)} />
 
-      <div className={`dash-card session-card${isRW && q.passage ? " session-card-split" : ""}`}>
-        {isRW && q.passage ? (
+      <div key={q.id} className={`dash-card session-card${isRW && (q.passage || q.passage_html) ? " session-card-split" : ""}`}>
+        {isRW && (q.passage || q.passage_html) ? (
           <div className="session-panes">
             <div
               className={`session-passage-pane${highlightOn ? " highlighting" : ""}`}
@@ -247,7 +287,7 @@ export default function StudySession({ questions }: { questions: Question[] }) {
               onClick={onPassageClick}
             >
               <span className="session-pane-label">Passage</span>
-              <QuestionText html={q.passage_html} text={q.passage} />
+              <QuestionText html={q.passage_html} text={q.passage ?? ""} />
             </div>
             <div className="session-divider" role="separator" aria-hidden="true" />
             <div className="session-question-pane">
@@ -260,14 +300,14 @@ export default function StudySession({ questions }: { questions: Question[] }) {
           </div>
         ) : (
           <>
-            {q.passage && (
+            {(q.passage || q.passage_html) && (
               <div
                 className={`session-passage${highlightOn ? " highlighting" : ""}`}
                 ref={passageRef}
                 onMouseUp={onPassageMouseUp}
                 onClick={onPassageClick}
               >
-                <QuestionText html={q.passage_html} text={q.passage} />
+                <QuestionText html={q.passage_html} text={q.passage ?? ""} />
               </div>
             )}
 
@@ -281,31 +321,26 @@ export default function StudySession({ questions }: { questions: Question[] }) {
         )}
       </div>
 
+      {actionError && <p role="alert">{actionError}</p>}
       <div className="session-actions">
         <button
           className={`btn ${saved ? "btn-primary" : "btn-ghost"}`}
           onClick={save}
           aria-pressed={saved}
+          disabled={saving}
         >
           {saved ? "★ Saved" : "☆ Save"}
         </button>
-        {!checked ? (
-          <button className="btn btn-primary" onClick={check} disabled={selected === null}>
+          <button className="btn btn-primary" onClick={check} disabled={checked || !selected?.trim()}>
             Check
           </button>
-        ) : index < questions.length - 1 ? (
-          <button className="btn btn-primary" onClick={next}>
-            Next question →
+          <button className="btn btn-ghost" onClick={next} disabled={advancing}>
+            {advancing ? "Loading..." : index < questionIds.length - 1 ? "Next question →" : "Restart"}
           </button>
-        ) : (
-          <button className="btn btn-ghost" onClick={() => setIndex(0)}>
-            Restart
-          </button>
-        )}
       </div>
 
-      <DesmosCalculator open={showCalc} onClose={() => setShowCalc(false)} />
-      <Tutor
+      {showCalc && <DesmosCalculator open={showCalc} onClose={() => setShowCalc(false)} />}
+      {showTutor && <Tutor
         open={showTutor}
         onClose={() => setShowTutor(false)}
         question={q.question_text}
@@ -313,7 +348,7 @@ export default function StudySession({ questions }: { questions: Question[] }) {
         domain={q.domain}
         explanation={q.explanation}
         correctAnswer={q.correct_answer}
-      />
+      />}
     </div>
   );
 }

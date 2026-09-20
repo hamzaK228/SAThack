@@ -12,6 +12,7 @@ import argparse
 import concurrent.futures
 import html
 import json
+import os
 import re
 import sys
 import time
@@ -19,6 +20,7 @@ import time
 sys.path.insert(0, __file__.rsplit("/", 1)[0] + "/../scripts")
 from extract_questions import post, GET_QUESTIONS, GET_QUESTION  # noqa: E402
 from math_alt import alt_to_latex  # noqa: E402
+from rich_html import sanitize_rich  # noqa: E402
 
 DIFF_MAP = {"E": "easy", "M": "medium", "H": "hard"}
 
@@ -53,6 +55,17 @@ def html_to_latex_text(html_text: str) -> str:
     return s.strip()
 
 
+def rich_question_html(html_text: str) -> str | None:
+    # Convert equation images, but retain the original diagrams and tables.
+    markup = IMG_RE.sub(
+        lambda m: html.escape(process_img(m.group(0)))
+        if "math-img" in m.group(0) or 'role="math"' in m.group(0)
+        else m.group(0),
+        html_text or "",
+    )
+    return sanitize_rich(markup)
+
+
 def build_question(meta: dict, detail: dict) -> dict:
     ans = detail.get("answer") or {}
     style = ans.get("style")
@@ -72,6 +85,7 @@ def build_question(meta: dict, detail: dict) -> dict:
             choices.append({
                 "label": letters[key],
                 "text": html_to_latex_text(opt.get("body", "")),
+                "html": rich_question_html(opt.get("body", "")),
             })
         answer = ans.get("correct_choice")
         if answer:
@@ -108,7 +122,9 @@ def build_question(meta: dict, detail: dict) -> dict:
         "score_band": meta.get("score_band_range_cd"),
         "type": "multiple_choice" if style == "Multiple Choice" else "grid_in",
         "stem": stem,
+        "stem_html": rich_question_html(detail.get("prompt", "")),
         "stimulus": stimulus,
+        "stimulus_html": rich_question_html(detail.get("body", "")),
         "choices": choices,
         "answer": answer,
         "accepted_answers": [answer] if answer else [],
@@ -131,6 +147,14 @@ def main():
 
     print(f"[active] {len(nulls)} null-external_id questions", file=sys.stderr)
 
+    questions = []
+    if os.path.exists(args.out):
+        with open(args.out, encoding="utf-8") as fh:
+            questions = json.load(fh)
+    done = {q["id"] for q in questions}
+    nulls = [m for m in nulls if m["questionId"] not in done]
+    print(f"[resume] {len(done)} saved, {len(nulls)} to fetch", file=sys.stderr)
+
     def fetch(m):
         try:
             d = post(GET_QUESTION, {"external_id": m["ibn"]}, retries=2)
@@ -139,7 +163,6 @@ def main():
             print(f"  ! failed {m['questionId']}: {exc}", file=sys.stderr)
             return None
 
-    questions = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=args.workers) as ex:
         for q in ex.map(fetch, nulls):
             if q:

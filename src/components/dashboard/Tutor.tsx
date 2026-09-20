@@ -3,6 +3,7 @@
 import { useState } from "react";
 import MathText from "@/components/MathText";
 import { askAI } from "@/app/dashboard/actions";
+import { useDialog } from "@/lib/use-dialog";
 
 type Msg = { role: "ai" | "user"; text: string };
 
@@ -23,6 +24,7 @@ export default function Tutor({
   explanation: string | null;
   correctAnswer: string;
 }) {
+  const dialog = useDialog(open,onClose);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "ai",
@@ -38,6 +40,7 @@ export default function Tutor({
 
   async function run(prompt: string) {
     setBusy(true);
+    try {
     const answer = await askAI({
       question: prompt,
       questionText: question,
@@ -45,8 +48,9 @@ export default function Tutor({
       skill,
       explanation,
     });
-    setBusy(false);
     add("ai", answer);
+    } catch { add("ai", "Could not reach the tutor. Please try again."); }
+    finally { setBusy(false); }
   }
 
   function hint() {
@@ -71,7 +75,7 @@ export default function Tutor({
   if (!open) return null;
 
   return (
-    <div className="tutor-panel">
+    <div className="tutor-panel" ref={dialog} role="dialog" aria-modal="true" aria-label="Tutor" tabIndex={-1}>
       <div className="tutor-head">
         <span className="tutor-title">💬 Tutor</span>
         <button className="tutor-close" onClick={onClose} aria-label="Close tutor">
@@ -103,6 +107,8 @@ export default function Tutor({
       <div className="tutor-input-row">
         <input
           className="tutor-input"
+          aria-label="Message to tutor"
+          maxLength={4000}
           placeholder="Ask anything…"
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -115,4 +121,3 @@ export default function Tutor({
     </div>
   );
 }
-

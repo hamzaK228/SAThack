@@ -54,7 +54,9 @@ export default function AuthPage() {
     const problems: Partial<Record<FieldKey, string>> = {};
     if (mode === "signup" && fullName.trim().length < 2) problems.fullName = FIELD_MESSAGES.fullName;
     if (!/^\S+@\S+\.\S+$/.test(email.trim())) problems.email = FIELD_MESSAGES.email;
-    if (password.length < 8) problems.password = FIELD_MESSAGES.password;
+    if (mode === "signup" ? password.length < 8 : !password.length) {
+      problems.password = mode === "signup" ? FIELD_MESSAGES.password : "Enter your password.";
+    }
     if (mode === "signup" && confirm !== password) problems.confirm = FIELD_MESSAGES.confirm;
     return problems;
   }, [mode, fullName, email, password, confirm]);
@@ -112,7 +114,7 @@ export default function AuthPage() {
           password,
           options: {
             data: { full_name: fullName.trim() },
-            emailRedirectTo: `${window.location.origin}/onboarding`,
+            emailRedirectTo: `${window.location.origin}/auth/callback?next=/onboarding`,
           },
         });
         if (signUpError) {
@@ -134,18 +136,7 @@ export default function AuthPage() {
         if (signInError) {
           setError(friendlyError(signInError.message));
         } else if (data.user) {
-          // Brand-new accounts go through setup; everyone else lands on the
-          // dashboard. Both checks go out together, and the redirect is a
-          // single replace() — the destination re-fetches itself.
-          const [profile, attempts] = await Promise.all([
-            supabase.from("profiles").select("test_date").eq("id", data.user.id).maybeSingle(),
-            supabase
-              .from("practice_attempts")
-              .select("*", { count: "exact", head: true })
-              .eq("user_id", data.user.id),
-          ]);
-          const fresh = !profile.data?.test_date && (attempts.count ?? 0) === 0;
-          router.replace(fresh ? "/onboarding" : "/dashboard");
+          router.replace("/dashboard");
         }
       }
     } catch (err) {
@@ -234,19 +225,20 @@ export default function AuthPage() {
             {fieldError("email") && <span className="field-error">{fieldError("email")}</span>}
           </label>
 
-          <label className="field">
-            <span className="field-label">Password</span>
+          <div className="field">
+            <label className="field-label" htmlFor="password">Password</label>
             <span className="field-password">
               <input
                 className="field-input"
                 type={showPassword ? "text" : "password"}
                 name="password"
+                id="password"
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onBlur={() => blur("password")}
                 aria-invalid={Boolean(fieldError("password"))}
-                minLength={8}
+                minLength={mode === "signup" ? 8 : 1}
                 required
               />
               <button
@@ -270,7 +262,8 @@ export default function AuthPage() {
                 </span>
               </span>
             ) : null}
-          </label>
+          </div>
+          {mode === "signin" && <Link className="auth-link" href="/auth/forgot">Forgot password?</Link>}
 
           {mode === "signup" && (
             <label className="field">

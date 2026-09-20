@@ -6,38 +6,44 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { knowledgeForTopic } from "@/lib/ai/knowledge";
 import { chatCompletion } from "@/lib/ai/llm";
+import { availableModels } from "@/lib/ai/models";
 import { applyReview } from "@/lib/vocab";
 import { regenerateStudyPlan } from "@/lib/study-plan-data";
+import { QUESTION_COLUMNS, QUESTION_BATCH_SIZE, type SessionQuestion } from "@/lib/session-questions";
+
+export async function loadSessionQuestions(ids: string[]) {
+  if (!ids.length || ids.length > QUESTION_BATCH_SIZE) throw new Error("Invalid question batch.");
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+  const supabase = await createClient();
+  const [questions, saved] = await Promise.all([
+    supabase.from("questions").select(QUESTION_COLUMNS).eq("is_official", true).eq("usable",true).in("id", ids),
+    supabase.from("saved_questions").select("question_id").eq("user_id", user.id).in("question_id", ids),
+  ]);
+  if (questions.error || saved.error) throw new Error("Could not load questions.");
+  const byId = new Map((questions.data ?? []).map((question) => [question.id, question]));
+  const ordered = ids.map((id) => byId.get(id));
+  if (ordered.some((question) => !question)) throw new Error("A question is no longer available. Reload the session.");
+  return { questions: ordered as SessionQuestion[], savedIds: (saved.data ?? []).map((row) => row.question_id) };
+}
 
 export async function recordAttempt(input: {
   question_id: string;
   selected_answer: string | null;
-  correct_answer: string;
-  is_correct: boolean;
-  section: string;
-  domain: string;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
-  await supabase.from("practice_attempts").insert({
+  const { error } = await supabase.from("practice_attempts").insert({
     user_id: user.id,
     question_id: input.question_id,
     selected_answer: input.selected_answer,
-    correct_answer: input.correct_answer,
-    is_correct: input.is_correct,
-    section: input.section,
-    domain: input.domain,
     mode: "drill",
   });
 
-  // Keep the Question Bank (solved/unsolved/missed counts) and the Review Queue
-  // in sync with the freshly recorded attempt.
-  revalidatePath("/dashboard/question-bank");
-  revalidatePath("/dashboard/review");
+  // Dynamic pages read fresh data on navigation; do not reload the active drill.
+  return { ok: !error };
 }
 
 /** Server-side guard rails for the goal editor — mirrors the DB check constraints. */
@@ -105,131 +111,19 @@ export async function updateGoals(input: {
   return { ok: true };
 }
 
-export async function toggleSave(question_id: string) {
+export async function toggleSave(question_id: string, saved: boolean) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
-  const { data: existing } = await supabase
-    .from("saved_questions")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("question_id", question_id)
-    .maybeSingle();
-
-  if (existing) {
-    await supabase
-      .from("saved_questions")
-      .delete()
-      .eq("user_id", user.id)
-      .eq("question_id", question_id);
-  } else {
-    await supabase.from("saved_questions").insert({ user_id: user.id, question_id });
+  if (!saved) {
+    const { error } = await supabase.from("saved_questions").delete()
+      .eq("user_id", user.id).eq("question_id", question_id);
+    return { ok: !error };
   }
-}
-
-export async function startTestSession(): Promise<string | null> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
-
-  const { data } = await supabase
-    .from("test_sessions")
-    .insert({
-      user_id: user.id,
-      status: "in_progress",
-      current_module: "rw1",
-      modules: { moduleIdx: 0, qIdx: 0, answers: {}, marked: [], m1: { rw: null, math: null } },
-    })
-    .select("id")
-    .single();
-
-  return data?.id ?? null;
-}
-
-export async function saveTestProgress(input: {
-  sessionId: string;
-  currentModule: string;
-  progress: Record<string, unknown>;
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
-
-  await supabase
-    .from("test_sessions")
-    .update({ current_module: input.currentModule, modules: input.progress })
-    .eq("id", input.sessionId)
-    .eq("user_id", user.id);
-}
-
-export async function completeTestSession(input: {
-  sessionId: string | null;
-  rw_correct: number;
-  math_correct: number;
-  rw_score: number;
-  math_score: number;
-  total_score: number;
-  attempts: {
-    question_id: string;
-    selected_answer: string | null;
-    correct_answer: string;
-    is_correct: boolean;
-    section: string;
-    domain: string;
-  }[];
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
-
-  if (input.attempts.length > 0) {
-    await supabase.from("practice_attempts").insert(
-      input.attempts.map((a) => ({
-        user_id: user.id,
-        question_id: a.question_id,
-        selected_answer: a.selected_answer,
-        correct_answer: a.correct_answer,
-        is_correct: a.is_correct,
-        section: a.section,
-        domain: a.domain,
-        mode: "full_test",
-      }))
-    );
-  }
-
-  const result = {
-    status: "completed",
-    rw_correct: input.rw_correct,
-    math_correct: input.math_correct,
-    rw_score: input.rw_score,
-    math_score: input.math_score,
-    total_score: input.total_score,
-    completed_at: new Date().toISOString(),
-    modules: {},
-  };
-
-  if (input.sessionId) {
-    await supabase
-      .from("test_sessions")
-      .update(result)
-      .eq("id", input.sessionId)
-      .eq("user_id", user.id);
-  } else {
-    await supabase.from("test_sessions").insert({
-      user_id: user.id,
-      current_module: "done",
-      ...result,
-    });
-  }
+  const { error } = await supabase.from("saved_questions").upsert({ user_id: user.id, question_id },
+    { onConflict: "user_id,question_id", ignoreDuplicates: true });
+  return { ok: !error };
 }
 
 export async function askAI(input: {
@@ -239,12 +133,20 @@ export async function askAI(input: {
   skill?: string | null;
   explanation?: string | null;
 }): Promise<string> {
+  if (typeof input.question !== "string" || !input.question.trim() || input.question.length > 4000 ||
+      [input.questionText, input.explanation].some(value => value != null && (typeof value !== "string" || value.length > 20000)) ||
+      [input.domain, input.skill].some(value => value != null && (typeof value !== "string" || value.length > 200))) {
+    return "Please keep your question under 4,000 characters.";
+  }
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
+  const { data: permitted, error: quotaError } = await supabase.rpc("consume_ai_quota");
+  if (quotaError) return "The tutor is temporarily unavailable. Please try again.";
+  if (!permitted) return "Please wait a few seconds before asking again. The daily limit is 50 messages.";
   const { data: profile } = await supabase
     .from("profiles")
     .select("ai_model")
@@ -276,18 +178,15 @@ ${context || "(none)"}`;
 
 
 export async function updateAIModel(ai_model: string | null) {
+  if (ai_model !== null && !availableModels().includes(ai_model)) throw new Error("This model is not available.");
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/auth");
 
-  const { data } = await supabase.from("profiles").select("id").eq("id", user.id).maybeSingle();
-  if (data) {
-    await supabase.from("profiles").update({ ai_model }).eq("id", user.id);
-  } else {
-    await supabase.from("profiles").insert({ id: user.id, ai_model });
-  }
+  const { error } = await supabase.from("profiles").upsert({ id: user.id, ai_model }, {onConflict:"id"});
+  if(error) throw new Error("Could not save your model preference.");
 }
 
 
@@ -428,69 +327,4 @@ export async function regeneratePlan() {
 
   revalidatePath("/dashboard/plan");
   revalidatePath("/dashboard");
-}
-
-
-export async function saveDiagnostic(input: {
-  rw_correct: number;
-  rw_total: number;
-  math_correct: number;
-  math_total: number;
-  domain_breakdown: Record<string, { correct: number; total: number }>;
-  attempts: {
-    question_id: string;
-    selected_answer: string | null;
-    correct_answer: string;
-    is_correct: boolean;
-    section: string;
-    domain: string;
-  }[];
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) redirect("/auth");
-
-  const rwScore = 200 + Math.round((input.rw_correct / Math.max(1, input.rw_total)) * 600);
-  const mathScore = 200 + Math.round((input.math_correct / Math.max(1, input.math_total)) * 600);
-  const total = rwScore + mathScore;
-
-  if (input.attempts.length > 0) {
-    await supabase.from("practice_attempts").insert(
-      input.attempts.map((a) => ({
-        user_id: user.id,
-        question_id: a.question_id,
-        selected_answer: a.selected_answer,
-        correct_answer: a.correct_answer,
-        is_correct: a.is_correct,
-        section: a.section,
-        domain: a.domain,
-        mode: "module",
-      }))
-    );
-  }
-
-  await supabase.from("diagnostics").insert({
-    user_id: user.id,
-    rw_score: rwScore,
-    math_score: mathScore,
-    total_score: total,
-    rw_module1_raw: input.rw_correct,
-    math_module1_raw: input.math_correct,
-    domain_breakdown: input.domain_breakdown,
-    completed_at: new Date().toISOString(),
-  });
-
-  // Set the baseline score if the user hasn't set one manually.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("current_score")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (!profile?.current_score) {
-    await supabase.from("profiles").update({ current_score: total }).eq("id", user.id);
-  }
-
-  return { rwScore, mathScore, total };
 }

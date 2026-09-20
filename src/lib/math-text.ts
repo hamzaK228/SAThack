@@ -13,18 +13,18 @@ export type MathPart =
   | { math: true; value: string }
   | { math: false; value: string };
 
-const MATH_RE = /(\$[^$]+\$)/g;
+const MATH_RE = /(\\\$|\$(?:\\.|[^$\\])+\$)/g;
 
 /** Split text into plain runs and `$...$` math runs. */
 export function splitMath(text: string): MathPart[] {
   if (!text) return [];
-  return text
+  return text.replace(/(_{3,})\s*blank\b/gi, "$1")
     .split(MATH_RE)
     .filter((part) => part !== "")
     .map((part) =>
       part.length > 2 && part.startsWith("$") && part.endsWith("$")
         ? ({ math: true, value: part.slice(1, -1) } as const)
-        : ({ math: false, value: part } as const)
+        : ({ math: false, value: part === "\\$" ? "$" : part } as const)
     );
 }
 
@@ -58,6 +58,15 @@ export function mathTextToHtml(text: string): string {
  * KaTeX markup into an SVG text node would break the graph.
  */
 export function richToHtml(markup: string): string {
+  // Stored rich question fragments are sanitized during import. Keep a final
+  // render-time tripwire so a bad database write cannot become executable HTML.
+  if (
+    /<\s*(?:script|iframe|object|embed|foreignobject|form|input|button|textarea|select|template|canvas|audio|video|animate|set)\b/i.test(markup) ||
+    /\s+on[a-z]+\s*=/i.test(markup) ||
+    /(?:javascript|vbscript|data\s*:\s*text\/html)\s*:/i.test(markup)
+  ) {
+    return "";
+  }
   if (!markup.includes("$")) return markup;
   return markup
     .split(/(<svg[\s\S]*?<\/svg>)/i)

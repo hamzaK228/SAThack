@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import MathText from "@/components/MathText";
 import { richToHtml } from "@/lib/math-text";
 
@@ -13,7 +13,7 @@ import { richToHtml } from "@/lib/math-text";
  * column through MathText, which is exactly what the app did before rich media
  * existed.
  */
-export default function QuestionText({
+export default memo(function QuestionText({
   html,
   text,
   className,
@@ -22,7 +22,7 @@ export default function QuestionText({
   text: string | null | undefined;
   className?: string;
 }) {
-  const markup = useMemo(() => (html ? richToHtml(html) : null), [html]);
+  const markup = useMemo(() => (html ? richToHtml(html) || null : null), [html]);
 
   if (markup) {
     return (
@@ -34,4 +34,4 @@ export default function QuestionText({
   }
 
   return <MathText text={text ?? ""} />;
-}
+});
