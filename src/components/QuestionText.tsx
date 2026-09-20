@@ -22,7 +22,7 @@ export default memo(function QuestionText({
   text: string | null | undefined;
   className?: string;
 }) {
-  const markup = useMemo(() => (html ? richToHtml(html) : null), [html]);
+  const markup = useMemo(() => (html ? richToHtml(html) || null : null), [html]);
 
   if (markup) {
     return (

@@ -58,6 +58,15 @@ export function mathTextToHtml(text: string): string {
  * KaTeX markup into an SVG text node would break the graph.
  */
 export function richToHtml(markup: string): string {
+  // Stored rich question fragments are sanitized during import. Keep a final
+  // render-time tripwire so a bad database write cannot become executable HTML.
+  if (
+    /<\s*(?:script|iframe|object|embed|foreignobject|form|input|button|textarea|select|template|canvas|audio|video|animate|set)\b/i.test(markup) ||
+    /\s+on[a-z]+\s*=/i.test(markup) ||
+    /(?:javascript|vbscript|data\s*:\s*text\/html)\s*:/i.test(markup)
+  ) {
+    return "";
+  }
   if (!markup.includes("$")) return markup;
   return markup
     .split(/(<svg[\s\S]*?<\/svg>)/i)

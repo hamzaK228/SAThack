@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { motion, useReducedMotion } from "framer-motion";
 import { useRef } from "react";
 import Terminal from "./Terminal";
 import Magnetic from "./Magnetic";
@@ -11,6 +11,7 @@ const EASE = [0.21, 0.47, 0.32, 0.98] as const;
 
 export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
   const ref = useRef<HTMLElement>(null);
+  const reduceMotion = useReducedMotion();
 
   function onMove(e: React.MouseEvent) {
     const el = ref.current;
@@ -34,27 +35,32 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
         <div className="hero-copy">
           <motion.p
             className="eyebrow"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, ease: EASE }}
           >
             Adaptive Digital SAT platform
           </motion.p>
 
-          <h1 className="hero-title">
+          <motion.h1
+            className="hero-title"
+            initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.68, delay: 0.12, ease: EASE }}
+          >
             <span className="line">
-              The SAT is a system.
+              The SAT is a system.{" "}
             </span>
             <span className="line grad">
-              <span className="hero-title-phrase">Every system</span>
-              <span className="hero-title-phrase">has a hack.</span>
+              <span className="hero-title-phrase">Every system{" "}</span>
+              <span className="hero-title-phrase">has a hack.{" "}</span>
               <span className="hero-title-phrase">Find yours.</span>
             </span>
-          </h1>
+          </motion.h1>
 
           <motion.p
             className="hero-sub"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.6, ease: EASE }}
           >
@@ -64,7 +70,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
 
           <motion.div
             className="hero-ctas"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0, y: 14 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.72, ease: EASE }}
           >
@@ -83,7 +89,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
           <motion.ul
             className="hero-meta"
             aria-label="Platform facts"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.6, delay: 0.86, ease: EASE }}
           >
@@ -101,7 +107,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
 
         <motion.div
           className="hero-visual"
-          initial={false}
+          initial={reduceMotion ? false : { opacity: 0, y: 24, scale: 0.985 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           transition={{ duration: 0.85, delay: 0.35, ease: EASE }}
         >
@@ -111,7 +117,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
 
           <motion.div
             className="float-card fc-1"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.1, duration: 0.5 }}
           >
@@ -122,7 +128,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
           </motion.div>
           <motion.div
             className="float-card fc-2"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.25, duration: 0.5 }}
           >
@@ -133,7 +139,7 @@ export default function Hero({ signedIn = false }: { signedIn?: boolean }) {
           </motion.div>
           <motion.div
             className="float-card fc-3"
-            initial={false}
+            initial={reduceMotion ? false : { opacity: 0, x: -12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 1.4, duration: 0.5 }}
           >

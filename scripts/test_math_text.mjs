@@ -25,6 +25,12 @@ test('plain text stays safely escaped', () => {
   assert.deepEqual(splitMath('unfinished $x'), [{ math: false, value: 'unfinished $x' }]);
 });
 
+test('unsafe rich markup is rejected before rendering', () => {
+  assert.equal(richToHtml('<img src="x" onerror="alert(1)">'), '');
+  assert.equal(richToHtml('<svg><script>alert(1)</script></svg>'), '');
+  assert.equal(richToHtml('<a href="javascript:alert(1)">open</a>'), '');
+});
+
 test('screen-reader blank labels do not appear next to printed underscores', () => {
   assert.equal(mathTextToHtml('around the ______blank When'), 'around the ______ When');
   assert.equal(mathTextToHtml('Fill in the blank.'), 'Fill in the blank.');

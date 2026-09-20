@@ -29,7 +29,7 @@ export default function Terminal() {
   }, []);
 
   return (
-    <div className="hero-terminal" aria-label="Sample diagnostic session">
+    <div className="hero-terminal" role="img" aria-label="Sample diagnostic session">
       <div className="terminal-bar">
         <span className="terminal-dot" aria-hidden="true"></span>
         <span className="terminal-dot" aria-hidden="true"></span>

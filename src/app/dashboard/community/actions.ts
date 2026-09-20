@@ -17,6 +17,10 @@ function clean(value: unknown, max: number) {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
 }
 
+function isUuid(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 function refreshCommunity() {
   revalidatePath("/dashboard/community");
 }
@@ -44,7 +48,7 @@ export async function createCommunityGroup(input: {
 }
 
 export async function setCommunityMembership(groupId: string, joined: boolean): Promise<Result> {
-  if (!/^[0-9a-f-]{36}$/i.test(groupId)) return { ok: false, error: "Invalid group." };
+  if (!isUuid(groupId) || typeof joined !== "boolean") return { ok: false, error: "Invalid group." };
   const { user, supabase } = await communityClient();
   const query = joined
     ? supabase.from("community_group_members").insert({ group_id: groupId, user_id: user.id, role: "member" })
@@ -66,6 +70,7 @@ export async function createCommunityPost(input: {
   const kind = ["discussion", "question", "resource"].includes(input.kind) ? input.kind : "discussion";
   if (title.length < 4) return { ok: false, error: "Add a short title so people can find the discussion." };
   if (!body) return { ok: false, error: "Write a message before posting." };
+  if (input.groupId !== null && !isUuid(input.groupId)) return { ok: false, error: "Invalid group." };
   const { user, supabase } = await communityClient();
   const { error } = await supabase.from("community_posts").insert({
     author_id: user.id,
@@ -81,6 +86,7 @@ export async function createCommunityPost(input: {
 }
 
 export async function addCommunityComment(postId: string, bodyValue: string): Promise<Result> {
+  if (!isUuid(postId)) return { ok: false, error: "Invalid post." };
   const body = clean(bodyValue, 1200);
   if (!body) return { ok: false, error: "Write a reply first." };
   const { user, supabase } = await communityClient();
@@ -96,6 +102,7 @@ export async function addCommunityComment(postId: string, bodyValue: string): Pr
 }
 
 export async function toggleCommunityReaction(postId: string, active: boolean): Promise<Result> {
+  if (!isUuid(postId) || typeof active !== "boolean") return { ok: false, error: "Invalid post." };
   const { user, supabase } = await communityClient();
   const query = active
     ? supabase.from("community_reactions").delete().eq("post_id", postId).eq("user_id", user.id)
@@ -107,6 +114,7 @@ export async function toggleCommunityReaction(postId: string, active: boolean): 
 }
 
 export async function deleteCommunityPost(postId: string): Promise<Result> {
+  if (!isUuid(postId)) return { ok: false, error: "Invalid post." };
   const { user, supabase } = await communityClient();
   const { error } = await supabase.from("community_posts").delete().eq("id", postId).eq("author_id", user.id);
   if (error) return { ok: false, error: "Could not delete this post." };
@@ -115,6 +123,7 @@ export async function deleteCommunityPost(postId: string): Promise<Result> {
 }
 
 export async function deleteCommunityComment(commentId: string): Promise<Result> {
+  if (!isUuid(commentId)) return { ok: false, error: "Invalid reply." };
   const { user, supabase } = await communityClient();
   const { error } = await supabase.from("community_comments").delete().eq("id", commentId).eq("author_id", user.id);
   if (error) return { ok: false, error: "Could not delete this reply." };
@@ -123,6 +132,7 @@ export async function deleteCommunityComment(commentId: string): Promise<Result>
 }
 
 export async function reportCommunityPost(postId: string): Promise<Result> {
+  if (!isUuid(postId)) return { ok: false, error: "Invalid post." };
   const { user, supabase } = await communityClient();
   const { error } = await supabase.from("community_reports").insert({
     reporter_id: user.id,

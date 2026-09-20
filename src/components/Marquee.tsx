@@ -12,7 +12,7 @@ const items = [
 export default function Marquee() {
   const row = [...items, ...items];
   return (
-    <div className="marquee" aria-label="Student score improvements">
+    <div className="marquee" role="region" aria-label="Student score improvements">
       <div className="marquee-track">
         {row.map((it, i) => (
           <div className="marquee-item" key={`${it.name}-${i}`}>

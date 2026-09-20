@@ -1297,7 +1297,7 @@ strong {
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-faint);
+  color: var(--ink-dim);
   margin-bottom: 0.4rem;
 }
 .footer-col a {
@@ -1315,7 +1315,7 @@ strong {
   justify-content: space-between;
   gap: 1rem;
   flex-wrap: wrap;
-  color: var(--ink-faint);
+  color: var(--ink-dim);
   font-size: 0.75rem;
 }
 @media (max-width: 720px) {
@@ -5521,6 +5521,17 @@ strong {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .aurora-blob,
+  .hero-terminal,
+  .float-card,
+  .marquee-track,
+  .brand-cursor,
+  .terminal-cursor {
+    animation: none;
+  }
   .level-badge,
   .checklist-bar > span::after,
   .badge-icon,
