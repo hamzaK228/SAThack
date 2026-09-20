@@ -21,7 +21,7 @@ export default async function CommunityPage({
   const [{ data: groups, error: groupsError }, { data: memberships }, { data: profile }] = await Promise.all([
     supabase.from("community_groups").select("id,slug,name,description,owner_id,owner_name,member_count,created_at").order("member_count", { ascending: false }).order("created_at", { ascending: false }),
     supabase.from("community_group_members").select("group_id,role").eq("user_id", user.id),
-    supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
+    supabase.from("profiles").select("username").eq("id", user.id).maybeSingle(),
   ]);
   if (groupsError) throw new Error("Could not load the community.");
   const typedGroups = (groups ?? []) as CommunityGroup[];
@@ -47,7 +47,7 @@ export default async function CommunityPage({
     <div className="dash-page community-page">
       <CommunityHub
         userId={user.id}
-        userName={profile?.full_name?.trim() || "SAT Student"}
+        userName={profile?.username?.trim() || "student"}
         groups={typedGroups}
         memberships={(memberships ?? []).map((item) => ({ groupId: item.group_id, role: item.role }))}
         selectedGroup={selectedGroup}

@@ -354,7 +354,7 @@ export default function AssessmentExam({
           scaled score.
         </p>
         <div className="exam-results-actions">
-          <Link className="btn btn-primary" href="/dashboard/review">
+          <Link className="btn btn-primary" href={kind === "practice" ? "/dashboard/test/review" : "/dashboard/review"}>
             Review mistakes
           </Link>
           <Link className="btn btn-ghost" href="/dashboard/plan">

@@ -111,6 +111,24 @@ export async function updateGoals(input: {
   return { ok: true };
 }
 
+export async function updateUsername(usernameValue: string): Promise<{ ok: boolean; error?: string }> {
+  const username = usernameValue.trim().toLowerCase();
+  if (!/^[a-z0-9_]{3,24}$/.test(username)) {
+    return { ok: false, error: "Use 3–24 lowercase letters, numbers, or underscores." };
+  }
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { error } = await supabase.from("profiles").update({ username }).eq("id", user.id);
+  if (error?.code === "23505") return { ok: false, error: "That username is already taken." };
+  if (error) return { ok: false, error: "Could not update your username." };
+
+  revalidatePath("/dashboard/settings");
+  revalidatePath("/dashboard/community");
+  return { ok: true };
+}
+
 export async function toggleSave(question_id: string, saved: boolean) {
   const supabase = await createClient();
   const user = await getCurrentUser();
