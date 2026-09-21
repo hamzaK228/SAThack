@@ -15,7 +15,7 @@ export default function DashboardShell({ email, isAdmin, children, rail }: { ema
     if (window.history.length > 1) router.back();
     else router.push(pathname === "/dashboard" ? "/" : "/dashboard");
   }
-  if (focusedExam) return <main className="exam-focus-main">{children}</main>;
+  if (focusedExam) return <main className="exam-focus-main"><div className="dash-route-motion" key={pathname}>{children}</div></main>;
 
   return (
     <div className={`dash-layout${collapsed ? " sidebar-collapsed" : ""}`}>
@@ -25,7 +25,7 @@ export default function DashboardShell({ email, isAdmin, children, rail }: { ema
           {collapsed && <button className="dash-tool" onClick={() => { setReopened(true); setCollapsed(false); }} title="Open sidebar" aria-label="Open sidebar"><PanelLeftOpen size={20} /></button>}
           <button className="dash-tool" onClick={back} title="Back" aria-label="Back"><ArrowLeft size={20} /><span>Back</span></button>
         </div>
-        {children}
+        <div className="dash-route-motion" key={pathname}>{children}</div>
       </main>
       {rail}
     </div>

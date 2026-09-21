@@ -3138,6 +3138,61 @@ strong {
    Emil Kowalski-style micro-motion
    ========================================================================== */
 
+.dash-route-motion {
+  min-width: 0;
+  animation: route-enter 420ms var(--ease-out) both;
+}
+.dash-route-motion .dash-page > * {
+  animation: section-enter 520ms var(--ease-out) both;
+}
+.dash-route-motion .dash-page > :nth-child(2) { animation-delay: 55ms; }
+.dash-route-motion .dash-page > :nth-child(3) { animation-delay: 100ms; }
+.dash-route-motion .dash-page > :nth-child(4) { animation-delay: 145ms; }
+.dash-route-motion .dash-page > :nth-child(5) { animation-delay: 190ms; }
+.dash-route-motion .dash-page > :nth-child(n + 6) { animation-delay: 230ms; }
+.admin-console > section {
+  animation: section-enter 560ms var(--ease-out) both;
+}
+.admin-console > section:nth-of-type(2) { animation-delay: 70ms; }
+.admin-console > section:nth-of-type(3) { animation-delay: 120ms; }
+.admin-console > section:nth-of-type(4) { animation-delay: 170ms; }
+.admin-console > section:nth-of-type(5) { animation-delay: 220ms; }
+.admin-console > section:nth-of-type(6) { animation-delay: 270ms; }
+.admin-stat,
+.admin-editor,
+.admin-list-card,
+.admin-review-list article,
+.admin-user-table article {
+  transition: transform 220ms var(--ease-out), border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+.admin-stat:hover,
+.admin-editor:hover,
+.admin-list-card:hover,
+.admin-review-list article:hover {
+  transform: translateY(-3px);
+  border-color: #c7d5c9;
+  box-shadow: 0 16px 36px rgba(22, 39, 28, .09);
+}
+.admin-user-table article:hover { background: #f7faf6; transform: translateX(2px); }
+.admin-primary,
+.admin-secondary,
+.admin-nav nav a {
+  transition: transform 180ms var(--ease-out), background 180ms ease-out, border-color 180ms ease-out, color 180ms ease-out;
+}
+.admin-primary:hover,
+.admin-secondary:hover { transform: translateY(-2px); }
+.admin-primary:active,
+.admin-secondary:active { transform: scale(.98); }
+
+@keyframes route-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes section-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* animated link underlines (nav + footer) */
 .site-nav a,
 .footer-col a,
@@ -3975,17 +4030,52 @@ strong {
    Practice test (exam) — 1609-style
    ========================================================================== */
 
-.exam-intro,
+.exam-intro {
+  width: 100%;
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 2.5rem 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(310px, .8fr);
+  align-items: center;
+  gap: clamp(2rem, 6vw, 5rem);
+}
 .exam-results {
   max-width: 720px;
   margin: 0 auto;
   padding: 2.5rem 0;
 }
+.exam-intro-copy { min-width: 0; }
+.exam-intro-copy .eyebrow { display: flex; align-items: center; gap: .5rem; }
 .exam-intro-title {
-  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  font-size: clamp(2rem, 5vw, 3.5rem);
   font-weight: 800;
-  margin: 0.4rem 0 0.6rem;
-  letter-spacing: -0.02em;
+  margin: 0.55rem 0 0.8rem;
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+}
+.exam-intro-meta { display: flex; flex-wrap: wrap; gap: .55rem; margin-top: 1.25rem; }
+.exam-intro-meta span { display: inline-flex; align-items: center; gap: .4rem; padding: .42rem .65rem; color: var(--ink-dim); border: 1px solid var(--border); border-radius: 7px; background: var(--bg-2); font-size: .72rem; font-weight: 700; }
+.exam-intro-meta svg { color: var(--cyan); }
+.exam-intro .exam-results-actions { margin-top: 1.5rem; }
+.exam-intro-note { margin-top: 1rem; color: var(--ink-faint); font-size: .68rem; }
+.exam-module-map { position: relative; display: grid; gap: .55rem; padding: 1rem; border: 1px solid var(--border-bright); border-radius: 14px; background: linear-gradient(150deg, rgba(198,255,74,.06), transparent 40%), var(--bg-2); box-shadow: 0 24px 60px -45px rgba(198,255,74,.55); }
+.exam-module-map::before { content: ""; position: absolute; left: 31px; top: 59px; bottom: 52px; width: 1px; background: linear-gradient(var(--signal), var(--cyan)); opacity: .35; }
+.exam-map-head { display: flex; align-items: center; justify-content: space-between; padding: .15rem .2rem .7rem; border-bottom: 1px solid var(--border); }
+.exam-map-head span { color: var(--signal-2); font-size: .67rem; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.exam-map-head small { color: var(--ink-faint); font-size: .65rem; }
+.exam-module-map article { position: relative; z-index: 1; display: grid; grid-template-columns: 27px 34px minmax(0,1fr); align-items: center; gap: .65rem; min-height: 58px; padding: .55rem .65rem; border: 1px solid var(--border); border-radius: 9px; background: rgba(6,7,5,.86); transition: transform 180ms var(--ease-out), border-color 180ms ease-out; }
+.exam-module-map article:hover { transform: translateX(3px); border-color: var(--border-bright); }
+.exam-module-index { color: var(--ink-faint); font-size: .65rem; font-weight: 800; }
+.exam-module-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; color: var(--signal); border-radius: 8px; background: rgba(198,255,74,.07); }
+.exam-module-map article div { display: grid; }
+.exam-module-map article strong { font-size: .76rem; }
+.exam-module-map article small { color: var(--ink-faint); font-size: .62rem; }
+.exam-map-foot { display: flex; align-items: center; gap: .5rem; padding: .35rem .25rem 0; color: var(--ink-faint); font-size: .64rem; }
+.exam-map-foot span { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 12px rgba(74,222,128,.6); }
+@media (max-width: 760px) {
+  .exam-intro { grid-template-columns: 1fr; padding: 1.5rem 0; }
+  .exam-module-map { max-width: 520px; width: 100%; }
 }
 .exam-modules {
   display: grid;
@@ -5734,7 +5824,12 @@ strong {
   .level-badge,
   .checklist-bar > span::after,
   .badge-icon,
-  .dash-progress-badge {
+  .dash-progress-badge,
+  .practice-live-dot,
+  .practice-progress-track span,
+  .dash-route-motion,
+  .dash-route-motion .dash-page > *,
+  .admin-console > section {
     animation: none;
     transition-duration: 0.01ms;
   }

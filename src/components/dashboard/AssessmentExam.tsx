@@ -7,8 +7,10 @@ import {
   ArrowLeft,
   ArrowRight,
   Bookmark,
+  BrainCircuit,
   Calculator,
   BookOpen,
+  Clock3,
   Eye,
   EyeOff,
   Highlighter,
@@ -22,6 +24,18 @@ import type { Assessment, AssessmentKind } from "@/lib/assessment";
 import { assessmentAction } from "@/app/dashboard/assessment-actions";
 const DesmosCalculator = dynamic(() => import("./DesmosCalculator"));
 const ReferenceSheet = dynamic(() => import("./ReferenceSheet"));
+
+const practiceModules = [
+  { label: "R&W 01", detail: "27 questions · 32 min", icon: BookOpen },
+  { label: "R&W 02", detail: "27 questions · 32 min", icon: BrainCircuit },
+  { label: "Math 01", detail: "22 questions · 35 min", icon: Calculator },
+  { label: "Math 02", detail: "22 questions · 35 min", icon: BrainCircuit },
+];
+
+const diagnosticModules = [
+  { label: "Reading & Writing", detail: "11 questions · untimed", icon: BookOpen },
+  { label: "Math", detail: "11 questions · untimed", icon: Calculator },
+];
 
 export default function AssessmentExam({
   kind,
@@ -279,43 +293,28 @@ export default function AssessmentExam({
       )}
     </div>
   );
+  const introModules = kind === "diagnostic" ? diagnosticModules : practiceModules;
   if (!started)
     return (
-      <div className="exam-intro">
-        <p className="eyebrow">
-          {kind === "diagnostic" ? "Diagnostic" : "Practice test"}
-        </p>
-        <h1 className="exam-intro-title">
-          {kind === "diagnostic" ? "Find your starting point" : title ?? "Digital SAT practice"}
-        </h1>
-        <p className="dash-sub">
-          {kind === "diagnostic"
-            ? "22 questions. Reading & Writing and Math. Untimed."
-            : "98 questions. Four timed modules. 134 minutes. Module 2 adapts to your Module 1 performance."}
-        </p>
-        <p className="field-help">
-          Results are practice estimates, not official SAT scores.
-        </p>
-        {feedback}
-        <div className="exam-results-actions">
-          {initial && (
-            <button
-              className="btn btn-primary"
-              disabled={busy}
-              onClick={() => void begin(false)}
-            >
-              Continue test
-            </button>
-          )}
-          <button
-            className={`btn ${initial ? "btn-ghost" : "btn-primary"}`}
-            disabled={busy}
-            onClick={() => void begin(true)}
-          >
-            {busy ? "Loading..." : initial ? "Start new test" : "Start"}
-          </button>
+        <div className="exam-intro">
+          <div className="exam-intro-copy">
+            <p className="eyebrow"><span className="practice-live-dot" /> {kind === "diagnostic" ? "Adaptive diagnostic" : "Digital SAT simulation"}</p>
+            <h1 className="exam-intro-title">{kind === "diagnostic" ? "Find your starting point" : title ?? "Digital SAT practice"}</h1>
+            <p className="dash-sub">{kind === "diagnostic" ? "A focused, untimed baseline across Reading & Writing and Math." : "Four timed modules. Module 2 adapts to your Module 1 performance, just like test-day pacing."}</p>
+            <div className="exam-intro-meta"><span><Clock3 size={15} /> {kind === "diagnostic" ? "Untimed" : "134 minutes"}</span><span><BrainCircuit size={15} /> {kind === "diagnostic" ? "22 questions" : "98 questions"}</span></div>
+            {feedback}
+            <div className="exam-results-actions">
+              {initial && <button className="btn btn-primary" disabled={busy} onClick={() => void begin(false)}>Continue test <ArrowRight size={17} /></button>}
+              <button className={`btn ${initial ? "btn-ghost" : "btn-primary"}`} disabled={busy} onClick={() => void begin(true)}>{busy ? "Loading..." : initial ? "Start new test" : "Begin assessment"}</button>
+            </div>
+            <p className="exam-intro-note">Results are practice estimates, not official SAT scores.</p>
+          </div>
+          <div className={`exam-module-map ${kind}`} aria-label="Assessment modules">
+            <div className="exam-map-head"><span>Assessment route</span><small>{introModules.length} modules</small></div>
+            {introModules.map(({ label, detail, icon: Icon }, moduleIndex) => <article key={label}><span className="exam-module-index">{String(moduleIndex + 1).padStart(2, "0")}</span><span className="exam-module-icon"><Icon size={18} /></span><div><strong>{label}</strong><small>{detail}</small></div></article>)}
+            <div className="exam-map-foot"><span /> Ready when you are</div>
+          </div>
         </div>
-      </div>
     );
   if (session?.status === "completed" && session.result)
     return (
