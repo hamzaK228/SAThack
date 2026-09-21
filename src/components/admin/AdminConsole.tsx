@@ -25,7 +25,7 @@ import {
   addQuestion,
   addVocabWord,
   deleteAdminEntity,
-  extractMathpixQuestion,
+  extractGlmOcrQuestion,
   generateVocabDraft,
   resolveCommunityReport,
   reviewVocabSuggestion,
@@ -159,7 +159,7 @@ export default function AdminConsole({
                 data.set("media_url", uploaded.url);
               }
               data.delete("media_file");
-              data.delete("mathpix_file");
+              data.delete("ocr_file");
               const result = await addQuestion(data);
               if (!result.ok && mediaPath) await createClient().storage.from("question-media").remove([mediaPath]);
               return result;
@@ -172,18 +172,18 @@ export default function AdminConsole({
             <textarea name="passage" placeholder="Passage or stimulus (optional)" rows={2} />
             <textarea name="question" value={questionText} onChange={(event) => setQuestionText(event.target.value)} placeholder="Question — use $...$ for math" rows={4} required />
             <div className="admin-media-tools">
-              <label className="admin-file-field"><span><ScanText size={14} /> Mathpix screenshot to math</span><input name="mathpix_file" type="file" accept="image/png,image/jpeg,image/webp" /></label>
+              <label className="admin-file-field"><span><ScanText size={14} /> GLM-OCR screenshot to math</span><input name="ocr_file" type="file" accept="image/png,image/jpeg" /></label>
               <button className="admin-secondary" type="button" disabled={pending} onClick={(event) => {
                 const form = event.currentTarget.form;
-                const file = form ? new FormData(form).get("mathpix_file") : null;
-                const mathpixData = new FormData();
-                if (file instanceof File) mathpixData.set("file", file);
+                const file = form ? new FormData(form).get("ocr_file") : null;
+                const ocrData = new FormData();
+                if (file instanceof File) ocrData.set("file", file);
                 run(async () => {
-                  const result = await extractMathpixQuestion(mathpixData);
+                  const result = await extractGlmOcrQuestion(ocrData);
                   if (result.ok && result.data?.text) setQuestionText(result.data.text);
                   return result;
                 });
-              }}><Sparkles size={14} /> Extract with Mathpix</button>
+              }}><Sparkles size={14} /> Extract with GLM-OCR</button>
             </div>
             <div className="admin-media-box">
               <span><ImagePlus size={15} /> Graph, table, or figure</span>

@@ -140,17 +140,16 @@ the private-schema permission used by the question RLS policy and creates the
 admin-only `question-media` upload bucket for graphs, tables, and figures.
 
 The question editor accepts SAT math in `$...$` LaTeX form. For screenshot OCR,
-create a Mathpix application and add these server-only values to `.env.local`:
+add a BigModel API key with GLM-OCR access as a server-only value in `.env.local`:
 
 ```bash
-MATHPIX_APP_ID=your_app_id
-MATHPIX_APP_KEY=your_app_key
+GLM_OCR_API_KEY=your_bigmodel_api_key
 ```
 
 Restart the dev server after adding them. In `/admin`, choose a screenshot and
-press **Extract with Mathpix**; the result is inserted as an editable draft, so
-it can be checked before publication. Do not prefix either Mathpix variable
-with `NEXT_PUBLIC_` because the credentials must never reach the browser.
+press **Extract with GLM-OCR**; the result is inserted as an editable Markdown
+and LaTeX draft, so it can be checked before publication. Do not prefix the
+variable with `NEXT_PUBLIC_` because the credential must never reach the browser.
 
 Students can propose missing vocabulary from `/dashboard/vocab`, optionally
 using GLM to draft the definition and example. Suggestions remain private until

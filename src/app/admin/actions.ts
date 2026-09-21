@@ -44,7 +44,7 @@ function questionMediaUrl(value: string) {
   }
 }
 
-function normalizeMathpixText(value: string) {
+function normalizeOcrText(value: string) {
   return value
     .replace(/\\\[([\s\S]*?)\\\]/g, (_match, math: string) => `$${math.trim()}$`)
     .replace(/\\\(([\s\S]*?)\\\)/g, (_match, math: string) => `$${math.trim()}$`)
@@ -137,49 +137,53 @@ export async function addQuestion(form: FormData): Promise<AdminActionResult> {
   return complete("Question added to the bank.");
 }
 
-export async function extractMathpixQuestion(form: FormData): Promise<AdminActionResult> {
+export async function extractGlmOcrQuestion(form: FormData): Promise<AdminActionResult> {
   const context = await adminContext();
   if (!context) return { ok: false, message: "Admin access required." };
-  const appId = process.env.MATHPIX_APP_ID?.trim();
-  const appKey = process.env.MATHPIX_APP_KEY?.trim();
-  if (!appId || !appKey) {
-    return { ok: false, message: "Mathpix is not configured. Add MATHPIX_APP_ID and MATHPIX_APP_KEY to .env.local." };
+  const apiKey = process.env.GLM_OCR_API_KEY?.trim();
+  if (!apiKey) {
+    return { ok: false, message: "GLM-OCR is not configured. Add GLM_OCR_API_KEY to the server environment." };
   }
   const file = form.get("file");
   if (!(file instanceof File) || file.size === 0) return { ok: false, message: "Choose a question screenshot first." };
-  if (!new Set(["image/png", "image/jpeg", "image/webp"]).has(file.type)) {
-    return { ok: false, message: "Mathpix accepts PNG, JPEG, or WebP images here." };
+  if (!new Set(["image/png", "image/jpeg"]).has(file.type)) {
+    return { ok: false, message: "GLM-OCR accepts PNG or JPEG screenshots here." };
   }
-  if (file.size > 5 * 1024 * 1024) return { ok: false, message: "Keep the Mathpix screenshot under 5 MB." };
+  if (file.size > 10 * 1024 * 1024) return { ok: false, message: "Keep the GLM-OCR screenshot under 10 MB." };
 
-  const payload = new FormData();
-  payload.set("file", file, file.name);
-  payload.set("options_json", JSON.stringify({
-    formats: ["text"],
-    math_inline_delimiters: ["$", "$"],
-    rm_spaces: true,
-  }));
   try {
-    const response = await fetch("https://api.mathpix.com/v3/text", {
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const dataUri = `data:${file.type};base64,${bytes.toString("base64")}`;
+    const endpoint = process.env.GLM_OCR_BASE_URL?.trim() || "https://open.bigmodel.cn/api/paas/v4/layout_parsing";
+    const response = await fetch(endpoint, {
       method: "POST",
-      headers: { app_id: appId, app_key: appKey },
-      body: payload,
-      signal: AbortSignal.timeout(20_000),
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model: "glm-ocr", file: dataUri }),
+      signal: AbortSignal.timeout(45_000),
       cache: "no-store",
     });
-    const result = await response.json() as { text?: string; confidence?: number; error?: string; error_info?: { message?: string } };
-    if (!response.ok || !result.text) {
-      return { ok: false, message: `Mathpix could not read this image: ${result.error_info?.message ?? result.error ?? response.statusText}` };
+    const result = await response.json() as {
+      md_results?: string;
+      message?: string;
+      error?: { message?: string } | string;
+      usage?: { total_tokens?: number };
+    };
+    const errorMessage = typeof result.error === "string" ? result.error : result.error?.message;
+    if (!response.ok || !result.md_results) {
+      return { ok: false, message: `GLM-OCR could not read this image: ${errorMessage ?? result.message ?? response.statusText}` };
     }
-    const text = normalizeMathpixText(result.text).slice(0, 8000);
-    await audit(context, "extract", "mathpix_question", undefined, { confidence: result.confidence ?? null });
+    const text = normalizeOcrText(result.md_results).slice(0, 8000);
+    await audit(context, "extract", "glm_ocr_question", undefined, { total_tokens: result.usage?.total_tokens ?? null });
     return {
       ok: true,
-      message: `Mathpix draft ready${typeof result.confidence === "number" ? ` (${Math.round(result.confidence * 100)}% confidence)` : ""}. Review it before publishing.`,
-      data: { text, confidence: String(result.confidence ?? "") },
+      message: "GLM-OCR draft ready. Review the text and LaTeX before publishing.",
+      data: { text },
     };
   } catch (error) {
-    const message = error instanceof Error && error.name === "TimeoutError" ? "Mathpix timed out." : "Mathpix is unavailable right now.";
+    const message = error instanceof Error && error.name === "TimeoutError" ? "GLM-OCR timed out." : "GLM-OCR is unavailable right now.";
     return { ok: false, message };
   }
 }
