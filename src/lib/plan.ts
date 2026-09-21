@@ -31,7 +31,11 @@ export type PlanTask = {
   minutes: number;
   questionCount: number;
   kind: "learn" | "practice" | "review" | "test" | "diagnostic";
+  day: number;
+  phase: PlanPhase;
 };
+
+export type PlanPhase = "foundation" | "skill-building" | "test-readiness" | "taper";
 
 export type FocusDomain = {
   domain: string;
@@ -48,6 +52,8 @@ export type StudyPlan = {
   gap: number | null;
   focusDomains: FocusDomain[];
   weeklyMinutes: number;
+  studyDaysPerWeek: number;
+  dailyMinutes: number;
   tasks: PlanTask[];
 };
 
@@ -105,19 +111,42 @@ export function buildPlan(input: {
   const weeks = daysLeft !== null ? Math.max(1, Math.ceil(daysLeft / 7)) : 8;
   const focus = rankDomains(input.stats);
   const gap = current !== null ? target - current : null;
+  const urgencyDays = daysLeft ?? 56;
+  const studyDaysPerWeek = urgencyDays <= 14 ? 6 : urgencyDays <= 45 ? 5 : 4;
+  const gapBoost = gap === null ? 0 : gap >= 300 ? 10 : gap >= 150 ? 5 : 0;
+  const dailyMinutes = Math.min(75, (urgencyDays <= 14 ? 55 : urgencyDays <= 45 ? 45 : 35) + gapBoost);
 
   const tasks: PlanTask[] = [];
   let uid = 0;
   const nextId = () => `task-${++uid}`;
 
+  const phaseFor = (week: number): PlanPhase => {
+    if (week === weeks && daysLeft !== null) return "taper";
+    const progress = week / Math.max(weeks, 1);
+    if (progress <= 0.3) return "foundation";
+    if (progress <= 0.72) return "skill-building";
+    return "test-readiness";
+  };
+
+  const addTask = (
+    week: number,
+    day: number,
+    phase: PlanPhase,
+    task: Omit<PlanTask, "id" | "week" | "day" | "phase">,
+  ) => tasks.push({ id: nextId(), week, day, phase, ...task });
+
   for (let w = 1; w <= weeks; w++) {
-    const domain = focus[(w - 1) % focus.length];
+    const primary = focus[(w - 1) % focus.length];
+    const oppositeSection = focus.find((item, index) => index !== ((w - 1) % focus.length) && item.section !== primary.section);
+    const secondary = oppositeSection ?? focus[w % focus.length];
     const isFinal = w === weeks;
+    const phase = phaseFor(w);
+    const fullTestWeek = !isFinal && (phase === "test-readiness" || w % 2 === 0);
+    let day = 1;
+    const nextDay = () => Math.min(day++, studyDaysPerWeek);
 
     if (w === 1 && current === null) {
-      tasks.push({
-        id: nextId(),
-        week: w,
+      addTask(w, nextDay(), phase, {
         title: "Take the diagnostic",
         domain: null,
         difficulty: null,
@@ -127,67 +156,70 @@ export function buildPlan(input: {
       });
     }
 
-    tasks.push({
-      id: nextId(),
-      week: w,
-      title: `Learn: ${domain.domain}`,
-      domain: domain.domain,
+    addTask(w, nextDay(), phase, {
+      title: `Learn the core moves: ${primary.domain}`,
+      domain: primary.domain,
       difficulty: null,
-      minutes: 25,
+      minutes: Math.max(20, dailyMinutes - 10),
       questionCount: 0,
       kind: "learn",
     });
-    tasks.push({
-      id: nextId(),
-      week: w,
-      title: `Drill: ${domain.domain} (easy)`,
-      domain: domain.domain,
-      difficulty: "easy",
-      minutes: 15,
-      questionCount: 8,
+
+    addTask(w, nextDay(), phase, {
+      title: `Targeted drill: ${primary.domain}`,
+      domain: primary.domain,
+      difficulty: phase === "foundation" ? "easy" : "medium",
+      minutes: dailyMinutes,
+      questionCount: phase === "foundation" ? 12 : 16,
       kind: "practice",
     });
-    tasks.push({
-      id: nextId(),
-      week: w,
-      title: `Drill: ${domain.domain} (medium)`,
-      domain: domain.domain,
-      difficulty: "medium",
-      minutes: 20,
-      questionCount: 10,
+
+    addTask(w, nextDay(), phase, {
+      title: `Balance drill: ${secondary.domain}`,
+      domain: secondary.domain,
+      difficulty: phase === "foundation" ? "easy" : "medium",
+      minutes: Math.max(25, dailyMinutes - 5),
+      questionCount: phase === "foundation" ? 10 : 14,
       kind: "practice",
     });
-    tasks.push({
-      id: nextId(),
-      week: w,
-      title: `Drill: ${domain.domain} (hard)`,
-      domain: domain.domain,
-      difficulty: "hard",
-      minutes: 25,
-      questionCount: 10,
+
+    addTask(w, nextDay(), phase, {
+      title: phase === "foundation" ? `Mixed practice: ${primary.section === "math" ? "Math" : "Reading & Writing"}` : "Timed mixed set",
+      domain: primary.domain,
+      difficulty: phase === "foundation" ? "medium" : "hard",
+      minutes: dailyMinutes,
+      questionCount: phase === "test-readiness" ? 20 : 15,
       kind: "practice",
     });
-    tasks.push({
-      id: nextId(),
-      week: w,
+
+    addTask(w, nextDay(), phase, {
       title: "Review every miss in your error log",
       domain: null,
       difficulty: null,
-      minutes: 15,
+      minutes: Math.max(20, dailyMinutes - 15),
       questionCount: 0,
       kind: "review",
     });
 
-    if (w % 2 === 0 || isFinal) {
-      tasks.push({
-        id: nextId(),
-        week: w,
-        title: "Full-length practice test",
+    if (fullTestWeek) {
+      addTask(w, nextDay(), phase, {
+        title: "Full-length timed SAT simulation",
         domain: null,
         difficulty: null,
-        minutes: 90,
-        questionCount: 44,
+        minutes: 134,
+        questionCount: 98,
         kind: "test",
+      });
+    }
+
+    if (isFinal) {
+      addTask(w, nextDay(), phase, {
+        title: "Light confidence review — no cramming",
+        domain: primary.domain,
+        difficulty: "easy",
+        minutes: 25,
+        questionCount: 8,
+        kind: "practice",
       });
     }
   }
@@ -204,6 +236,8 @@ export function buildPlan(input: {
     gap,
     focusDomains: focus,
     weeklyMinutes,
+    studyDaysPerWeek,
+    dailyMinutes,
     tasks,
   };
 }
@@ -242,4 +276,3 @@ export function taskHref(task: PlanTask): string {
       return "/dashboard/diagnostic";
   }
 }
-

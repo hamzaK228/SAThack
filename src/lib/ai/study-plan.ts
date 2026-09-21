@@ -40,6 +40,9 @@ export type GeneratedPlan = {
   currentScore: number | null;
   gap: number | null;
   focusDomains: FocusDomain[];
+  weeklyMinutes: number;
+  studyDaysPerWeek: number;
+  dailyMinutes: number;
   tasks: PlanTask[];
 };
 
@@ -127,6 +130,13 @@ ${analysis.mistakeLines.join("\n")}
 RELEVANT KNOWLEDGE FROM SAT BOOKS:
 ${bookSnippets.slice(0, 4).join("\n---\n") || "(none)"}
 
+PLANNING STANDARD:
+- Diagnose before prescribing. Base every claim on the supplied results.
+- Prioritize the lowest-accuracy skills, but keep both Math and Reading & Writing active each week.
+- Use a learn → targeted practice → timed practice → error-log review loop.
+- Recommend official Bluebook full-length tests for realistic adaptive-test rehearsal.
+- Do not promise a score increase. Make advice specific, calm, and feasible before the test date.
+
 Return ONLY a JSON object with these exact keys:
 {
   "summary": "2-3 sentences: what to focus on and why",
@@ -201,6 +211,9 @@ function localPlan(ctx: PlanContext, analysis: ReturnType<typeof analyzeContext>
     currentScore: ctx.currentScore,
     gap,
     focusDomains: plan.focusDomains,
+    weeklyMinutes: plan.weeklyMinutes,
+    studyDaysPerWeek: plan.studyDaysPerWeek,
+    dailyMinutes: plan.dailyMinutes,
     tasks: plan.tasks,
   };
 }
@@ -236,6 +249,9 @@ export async function generatePlan(
     currentScore: ctx.currentScore,
     gap,
     focusDomains: base.focusDomains,
+    weeklyMinutes: base.weeklyMinutes,
+    studyDaysPerWeek: base.studyDaysPerWeek,
+    dailyMinutes: base.dailyMinutes,
     tasks: base.tasks,
   };
 
@@ -281,4 +297,3 @@ export async function generatePlan(
 
   return { ...localPlan(ctx, analysis, bookSnippets), ...schedule };
 }
-

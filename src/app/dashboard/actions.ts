@@ -194,6 +194,59 @@ ${context || "(none)"}`;
   return "I don't have a specific answer for that yet. Try asking about an SAT topic, skill, or strategy.";
 }
 
+export async function draftVocabSuggestion(wordValue: string): Promise<{
+  ok: boolean;
+  error?: string;
+  draft?: { definition: string; example: string; tags: string };
+}> {
+  const word = wordValue.trim().slice(0, 80);
+  if (word.length < 2) return { ok: false, error: "Enter a word first." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+  const { data: permitted, error: quotaError } = await supabase.rpc("consume_ai_quota");
+  if (quotaError || !permitted) return { ok: false, error: "AI drafting is temporarily unavailable. You can enter the meaning yourself." };
+  const raw = await chatCompletion(
+    `Create a student-friendly SAT vocabulary entry for "${word}". Return JSON only with definition, example, and tags. Definition must be precise, example must make the meaning inferable from context, and tags must be an array of at most 4 short strings.`,
+    { json: true, temperature: 0.2 },
+  );
+  try {
+    const value = JSON.parse(raw) as { definition?: string; example?: string; tags?: string[] };
+    if (!value.definition) throw new Error("missing definition");
+    return { ok: true, draft: { definition: value.definition.slice(0, 800), example: (value.example ?? "").slice(0, 800), tags: (value.tags ?? []).slice(0, 4).join(", ") } };
+  } catch {
+    return { ok: false, error: "AI could not draft this entry. Try again or write it manually." };
+  }
+}
+
+export async function submitVocabSuggestion(input: {
+  word: string;
+  definition: string;
+  example: string;
+  tags: string;
+  aiAssisted: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const word = input.word.trim().slice(0, 80);
+  const definition = input.definition.trim().slice(0, 800);
+  const example = input.example.trim().slice(0, 800);
+  const tags = input.tags.split(",").map((tag) => tag.trim()).filter(Boolean).slice(0, 8);
+  if (word.length < 2 || definition.length < 3) return { ok: false, error: "Add a word and a clear definition." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+  const { error } = await supabase.from("vocab_suggestions").insert({
+    user_id: user.id,
+    word,
+    definition,
+    example_sentence: example,
+    tags,
+    ai_assisted: input.aiAssisted,
+  });
+  if (error) return { ok: false, error: "Could not submit this word. The contribution feature may need the latest database migration." };
+  revalidatePath("/dashboard/vocab");
+  return { ok: true };
+}
+
 
 export async function updateAIModel(ai_model: string | null) {
   if (ai_model !== null && !availableModels().includes(ai_model)) throw new Error("This model is not available.");

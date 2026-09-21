@@ -51,11 +51,44 @@ export async function createCommunityGroup(input: {
 export async function setCommunityMembership(groupId: string, joined: boolean): Promise<Result> {
   if (!isUuid(groupId) || typeof joined !== "boolean") return { ok: false, error: "Invalid group." };
   const { user, supabase } = await communityClient();
-  const query = joined
-    ? supabase.from("community_group_members").insert({ group_id: groupId, user_id: user.id, role: "member" })
-    : supabase.from("community_group_members").delete().eq("group_id", groupId).eq("user_id", user.id);
-  const { error } = await query;
-  if (error) return { ok: false, error: joined ? "Could not join this group." : "Could not leave this group." };
+  if (joined) {
+    // A rejected/cancelled request can be submitted again. Membership itself
+    // is created only after the owner approves the pending request.
+    await supabase.from("community_group_requests").delete().eq("group_id", groupId).eq("user_id", user.id);
+    const { error } = await supabase.from("community_group_requests").insert({
+      group_id: groupId,
+      user_id: user.id,
+      requester_name: "SAT Student",
+      status: "pending",
+    });
+    if (error) return { ok: false, error: "Could not send your join request." };
+  } else {
+    const [requestResult, membershipResult] = await Promise.all([
+      supabase.from("community_group_requests").delete().eq("group_id", groupId).eq("user_id", user.id),
+      supabase.from("community_group_members").delete().eq("group_id", groupId).eq("user_id", user.id).eq("role", "member"),
+    ]);
+    if (requestResult.error && membershipResult.error) return { ok: false, error: "Could not leave or cancel this request." };
+  }
+  refreshCommunity();
+  return { ok: true };
+}
+
+export async function reviewCommunityMembership(
+  groupId: string,
+  userId: string,
+  decision: "approved" | "rejected",
+): Promise<Result> {
+  if (!isUuid(groupId) || !isUuid(userId) || !["approved", "rejected"].includes(decision)) {
+    return { ok: false, error: "Invalid membership request." };
+  }
+  const { supabase } = await communityClient();
+  const { error } = await supabase
+    .from("community_group_requests")
+    .update({ status: decision })
+    .eq("group_id", groupId)
+    .eq("user_id", userId)
+    .eq("status", "pending");
+  if (error) return { ok: false, error: "Could not update this membership request." };
   refreshCommunity();
   return { ok: true };
 }

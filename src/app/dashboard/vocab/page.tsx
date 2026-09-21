@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import VocabCards, { type VocabWord } from "@/components/dashboard/VocabCards";
 import { cleanExample, isDue, type VocabProgress } from "@/lib/vocab";
+import VocabContribution from "@/components/dashboard/VocabContribution";
 
 export const dynamic = "force-dynamic";
 
@@ -148,6 +149,8 @@ export default async function VocabPage({
         )}
       </form>
 
+      <VocabContribution />
+
       <div className="vocab-tabs">
         {tabs.map((t) => (
           <Link
@@ -219,4 +222,3 @@ export default async function VocabPage({
     </div>
   );
 }
-

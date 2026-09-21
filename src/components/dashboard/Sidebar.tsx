@@ -28,11 +28,12 @@ const quick = [
   { href: "/dashboard/test", label: "Practice Test", icon: "▣" },
 ];
 
-export default function Sidebar({ email, onClose, initialOpen = false }: { email: string; onClose: () => void; initialOpen?: boolean }) {
+export default function Sidebar({ email, isAdmin, onClose, initialOpen = false }: { email: string; isAdmin: boolean; onClose: () => void; initialOpen?: boolean }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(initialOpen);
   const mobile=useSyncExternalStore(subscribe,()=>window.matchMedia(mobileQuery).matches,()=>false);
   const dialog=useDialog<HTMLElement>(open && mobile,()=>setOpen(false));
+  const visibleNav = isAdmin ? [...nav, { href: "/admin", label: "Admin", icon: "⌘" }] : nav;
 
   function isActive(href: string) {
     if (href === "/dashboard") return pathname === "/dashboard";
@@ -62,7 +63,7 @@ export default function Sidebar({ email, onClose, initialOpen = false }: { email
 
         <nav className="dash-nav" aria-label="Dashboard">
           <span className="dash-nav-label">Menu</span>
-          {nav.map((item) => (
+          {visibleNav.map((item) => (
             <Link
               prefetch={false}
               key={item.href}

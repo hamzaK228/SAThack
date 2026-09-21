@@ -100,7 +100,7 @@ export default function PlanChecklist({
                 <span className="task-body">
                   <span className="task-title">{task.title}</span>
                   <span className="task-meta">
-                    {task.minutes} min
+                    Day {task.day} · {task.minutes} min
                     {task.questionCount ? ` · ${task.questionCount} questions` : ""}
                   </span>
                 </span>

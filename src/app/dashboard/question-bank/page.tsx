@@ -103,7 +103,7 @@ export default async function QuestionBankPage({
       <div className="dash-head">
         <div>
           <h1 className="dash-title">Question Bank</h1>
-          <p className="dash-sub">{collection?.title ?? "Official College Board"}</p>
+          <p className="dash-sub">{collection?.title ?? "Approved SAT question library"}</p>
         </div>
       </div>
 

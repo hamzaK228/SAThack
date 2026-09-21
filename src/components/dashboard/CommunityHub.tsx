@@ -7,6 +7,7 @@ import {
   Flag,
   Globe2,
   Heart,
+  LayoutGrid,
   MessageCircle,
   Plus,
   Search,
@@ -24,6 +25,7 @@ import {
   deleteCommunityComment,
   deleteCommunityPost,
   reportCommunityPost,
+  reviewCommunityMembership,
   setCommunityMembership,
   searchCommunityUsers,
   toggleCommunityReaction,
@@ -59,6 +61,7 @@ export type CommunityComment = {
   created_at: string;
 };
 export type CommunityReaction = { post_id: string; user_id: string };
+export type CommunityMembershipRequest = { groupId: string; userId: string; requesterName: string; status: string; requestedAt: string };
 
 function initials(name: string) {
   return name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase();
@@ -78,6 +81,7 @@ export default function CommunityHub({
   userName,
   groups,
   memberships,
+  membershipRequests,
   selectedGroup,
   posts,
   comments,
@@ -87,6 +91,7 @@ export default function CommunityHub({
   userName: string;
   groups: CommunityGroup[];
   memberships: { groupId: string; role: string }[];
+  membershipRequests: CommunityMembershipRequest[];
   selectedGroup: CommunityGroup | null;
   posts: CommunityPost[];
   comments: CommunityComment[];
@@ -102,9 +107,15 @@ export default function CommunityHub({
   const [studentSearch, setStudentSearch] = useState("");
   const [searching, setSearching] = useState(false);
   const [studentSearched, setStudentSearched] = useState(false);
+  const [feedSearch, setFeedSearch] = useState("");
+  const [feedKind, setFeedKind] = useState<"all" | CommunityPost["kind"]>("all");
+  const [feedSort, setFeedSort] = useState<"latest" | "popular">("latest");
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const groupDialogRef = useDialog<HTMLFormElement>(groupDialog, () => setGroupDialog(false));
   const memberIds = useMemo(() => new Set(memberships.map((item) => item.groupId)), [memberships]);
+  const pendingGroupIds = useMemo(() => new Set(membershipRequests.filter((item) => item.userId === userId && item.status === "pending").map((item) => item.groupId)), [membershipRequests, userId]);
+  const ownedGroupIds = useMemo(() => new Set(memberships.filter((item) => item.role === "owner").map((item) => item.groupId)), [memberships]);
+  const incomingRequests = useMemo(() => membershipRequests.filter((item) => item.status === "pending" && ownedGroupIds.has(item.groupId)), [membershipRequests, ownedGroupIds]);
   const canPost = !selectedGroup || memberIds.has(selectedGroup.id);
   const commentsByPost = useMemo(() => {
     const grouped = new Map<string, CommunityComment[]>();
@@ -116,6 +127,20 @@ export default function CommunityHub({
     reactions.forEach((reaction) => grouped.set(reaction.post_id, [...(grouped.get(reaction.post_id) ?? []), reaction]));
     return grouped;
   }, [reactions]);
+  const visiblePosts = useMemo(() => {
+    const query = feedSearch.trim().toLowerCase();
+    return posts
+      .filter((post) => feedKind === "all" || post.kind === feedKind)
+      .filter((post) => !query || `${post.title} ${post.body} ${post.author_name}`.toLowerCase().includes(query))
+      .sort((a, b) => {
+        if (feedSort === "popular") {
+          const aScore = (reactionsByPost.get(a.id)?.length ?? 0) + (commentsByPost.get(a.id)?.length ?? 0) * 2;
+          const bScore = (reactionsByPost.get(b.id)?.length ?? 0) + (commentsByPost.get(b.id)?.length ?? 0) * 2;
+          if (aScore !== bScore) return bScore - aScore;
+        }
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+  }, [commentsByPost, feedKind, feedSearch, feedSort, posts, reactionsByPost]);
 
   useEffect(() => {
     const supabase = createClient();
@@ -128,6 +153,8 @@ export default function CommunityHub({
       .on("postgres_changes", { event: "*", schema: "public", table: "community_posts" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "community_comments" }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "community_reactions" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "community_group_requests" }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "community_group_members" }, refresh)
       .subscribe();
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
@@ -194,11 +221,39 @@ export default function CommunityHub({
         </button>
       </header>
 
+      <section className="community-welcome" aria-label="Community overview">
+        <div><span className="community-welcome-icon"><Users size={20} /></span><div><strong>Study together, stay safe.</strong><p>Ask a focused question, share a useful resource, or celebrate progress. Never post personal contact details.</p></div></div>
+        <dl>
+          <div><dt>Posts here</dt><dd>{posts.length}</dd></div>
+          <div><dt>Your groups</dt><dd>{memberIds.size}</dd></div>
+          <div><dt>Study groups</dt><dd>{groups.length}</dd></div>
+        </dl>
+      </section>
+
       <div className="community-tabs" role="navigation" aria-label="Community channels">
         <Link href="/dashboard/community" className={!selectedGroup ? "active" : ""}><Globe2 size={16} /> International</Link>
         {groups.filter((group) => memberIds.has(group.id)).slice(0, 4).map((group) => (
           <Link key={group.id} href={`/dashboard/community?group=${group.slug}`} className={selectedGroup?.id === group.id ? "active" : ""}>#{group.name}</Link>
         ))}
+      </div>
+
+      <div className="community-feed-tools" aria-label="Filter community posts">
+        <label className="community-feed-search">
+          <Search size={16} aria-hidden="true" />
+          <span className="sr-only">Search posts</span>
+          <input value={feedSearch} onChange={(event) => setFeedSearch(event.target.value)} placeholder="Search posts, topics, or students" />
+          {feedSearch && <button onClick={() => setFeedSearch("")} aria-label="Clear search"><X size={15} /></button>}
+        </label>
+        <div className="community-filter-pills">
+          {(["all", "question", "discussion", "resource"] as const).map((kind) => (
+            <button key={kind} className={feedKind === kind ? "active" : ""} onClick={() => setFeedKind(kind)} aria-pressed={feedKind === kind}>
+              {kind === "all" ? "All posts" : kind === "question" ? "Questions" : kind === "discussion" ? "Discussions" : "Resources"}
+            </button>
+          ))}
+        </div>
+        <button className="community-sort" onClick={() => setFeedSort((sort) => sort === "latest" ? "popular" : "latest")}>
+          <LayoutGrid size={15} /> {feedSort === "latest" ? "Latest" : "Popular"}
+        </button>
       </div>
 
       {notice.text && <p className={`feedback ${notice.bad ? "bad" : "ok"}`} role="status">{notice.text}</p>}
@@ -223,14 +278,15 @@ export default function CommunityHub({
 
       <div className="community-layout">
         <main className="community-feed" aria-label="Community posts">
-          {!posts.length && (
+          {!visiblePosts.length && (
             <div className="community-empty">
               <MessageCircle size={28} />
-              <h2>Start the conversation</h2>
-              <p>No posts here yet.</p>
+              <h2>{posts.length ? "No matching posts" : "Start the conversation"}</h2>
+              <p>{posts.length ? "Try a different search or filter." : "No posts here yet."}</p>
+              {posts.length > 0 && <button className="btn btn-ghost" onClick={() => { setFeedSearch(""); setFeedKind("all"); }}>Clear filters</button>}
             </div>
           )}
-          {posts.map((post) => {
+          {visiblePosts.map((post) => {
             const postComments = commentsByPost.get(post.id) ?? [];
             const postReactions = reactionsByPost.get(post.id) ?? [];
             const reacted = postReactions.some((reaction) => reaction.user_id === userId);
@@ -298,14 +354,22 @@ export default function CommunityHub({
             )}
           </form>
           <div className="community-groups-head"><div><span>Study groups</span><small>{groups.length} active</small></div><button aria-label="Create group" title="Create group" onClick={() => setGroupDialog(true)}><Plus size={18} /></button></div>
+          {incomingRequests.length > 0 && <section className="community-join-requests" aria-label="Join requests">
+            <header><strong>Join requests</strong><span>{incomingRequests.length}</span></header>
+            {incomingRequests.map((request) => {
+              const group = groups.find((item) => item.id === request.groupId);
+              return <div key={`${request.groupId}-${request.userId}`}><span className="community-avatar small">{initials(request.requesterName)}</span><div><strong>@{request.requesterName}</strong><small>{group?.name ?? "Study group"}</small></div><button className="accept" aria-label={`Approve ${request.requesterName}`} onClick={() => run(() => reviewCommunityMembership(request.groupId, request.userId, "approved"))}><span aria-hidden="true">✓</span></button><button aria-label={`Reject ${request.requesterName}`} onClick={() => run(() => reviewCommunityMembership(request.groupId, request.userId, "rejected"))}><X size={14} /></button></div>;
+            })}
+          </section>}
           <div className="community-group-list">
             {groups.map((group) => {
               const joined = memberIds.has(group.id);
+              const requested = pendingGroupIds.has(group.id);
               const owner = memberships.find((item) => item.groupId === group.id)?.role === "owner";
               return (
                 <div className="community-group" key={group.id}>
                   <Link href={`/dashboard/community?group=${group.slug}`}><span>#</span><div><strong>{group.name}</strong><small><Users size={13} /> {group.member_count}</small></div></Link>
-                  {!owner && <button className={joined ? "joined" : ""} onClick={() => run(() => setCommunityMembership(group.id, !joined))} disabled={pending}>{joined ? "Joined" : "Join"}</button>}
+                  {!owner && <button className={joined || requested ? "joined" : ""} onClick={() => run(() => setCommunityMembership(group.id, !(joined || requested)))} disabled={pending}>{joined ? "Joined" : requested ? "Pending" : "Request"}</button>}
                 </div>
               );
             })}

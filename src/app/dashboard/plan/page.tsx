@@ -3,6 +3,35 @@ import PlanChecklist from "@/components/dashboard/PlanChecklist";
 import RegeneratePlanButton from "@/components/dashboard/RegeneratePlanButton";
 import { getStudyPlan } from "@/lib/study-plan-data";
 import { taskKey } from "@/lib/plan";
+import { BookOpenCheck, CalendarDays, Clock3, ExternalLink, Gauge, Target } from "lucide-react";
+
+const OFFICIAL_RESOURCES = [
+  {
+    name: "Bluebook practice tests",
+    description: "Take a full-length adaptive SAT in the real test interface.",
+    href: "https://bluebook.collegeboard.org/students/practice",
+    tag: "Test simulation",
+  },
+  {
+    name: "Student Question Bank",
+    description: "Build official question sets by domain, skill, and difficulty.",
+    href: "https://satsuitequestionbank.collegeboard.org/",
+    tag: "Targeted practice",
+  },
+  {
+    name: "Official SAT Prep on Khan Academy",
+    description: "Review concepts with short lessons, examples, and skill practice.",
+    href: "https://www.khanacademy.org/test-prep/digital-sat",
+    tag: "Learn concepts",
+  },
+] as const;
+
+const PHASE_LABEL = {
+  foundation: "Foundation",
+  "skill-building": "Skill building",
+  "test-readiness": "Test readiness",
+  taper: "Final taper",
+} as const;
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +63,24 @@ export default async function PlanPage() {
         </div>
         <RegeneratePlanButton />
       </div>
+
+      <Reveal>
+        <section className="plan-command" aria-label="Plan overview">
+          <div className="plan-command-main">
+            <span className="plan-command-icon"><Target size={22} /></span>
+            <div>
+              <span className="plan-command-label">Your weekly pace</span>
+              <strong>{plan.studyDaysPerWeek} study days · about {plan.dailyMinutes} min a day</strong>
+              <p>{plan.daysLeft === null ? "Set a test date in Settings and the workload will automatically rebalance." : `${plan.daysLeft} days left. The plan gets more test-focused as your date approaches.`}</p>
+            </div>
+          </div>
+          <div className="plan-command-metrics">
+            <span><CalendarDays size={16} /><strong>{plan.weeks}</strong> weeks</span>
+            <span><Clock3 size={16} /><strong>{plan.weeklyMinutes}</strong> min this week</span>
+            <span><Gauge size={16} /><strong>{PHASE_LABEL[plan.tasks[0]?.phase ?? "foundation"]}</strong> phase</span>
+          </div>
+        </section>
+      </Reveal>
 
       <Reveal>
         <div className="dash-card plan-progress-card">
@@ -136,6 +183,28 @@ export default async function PlanPage() {
         </Reveal>
       </div>
 
+      <Reveal>
+        <section className="dash-card plan-resources">
+          <div className="plan-section-heading">
+            <div>
+              <p className="eyebrow">Trusted resources</p>
+              <h2 className="dash-section-title">Use the right tool for each session</h2>
+            </div>
+            <BookOpenCheck size={24} aria-hidden="true" />
+          </div>
+          <div className="plan-resource-grid">
+            {OFFICIAL_RESOURCES.map((resource) => (
+              <a key={resource.name} href={resource.href} target="_blank" rel="noreferrer" className="plan-resource-card">
+                <span>{resource.tag}</span>
+                <strong>{resource.name}</strong>
+                <p>{resource.description}</p>
+                <small>Open official resource <ExternalLink size={13} /></small>
+              </a>
+            ))}
+          </div>
+        </section>
+      </Reveal>
+
       <div className="analytics-grid">
         <Reveal>
           <div className="dash-card">
@@ -181,13 +250,14 @@ export default async function PlanPage() {
 
       {weeks.map((w) => (
         <Reveal key={w.week}>
-          <div className="dash-card">
+          <div className="dash-card plan-week-card">
             <h2 className="dash-section-title">
               Week {w.week}
               <span className="week-tag">
                 {w.week === 1 ? "this week" : w.week === plan.weeks ? "final stretch" : ""}
               </span>
             </h2>
+            <p className="plan-week-phase">{PHASE_LABEL[w.tasks[0]?.phase ?? "foundation"]}</p>
             <PlanChecklist tasks={w.tasks} done={plan.done} showProgress />
           </div>
         </Reveal>
@@ -195,4 +265,3 @@ export default async function PlanPage() {
     </div>
   );
 }
-

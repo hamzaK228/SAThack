@@ -18,9 +18,10 @@ export default async function CommunityPage({
   if (!user) return null;
   const supabase = await createClient();
   const groupSlug = (await searchParams).group;
-  const [{ data: groups, error: groupsError }, { data: memberships }, { data: profile }] = await Promise.all([
+  const [{ data: groups, error: groupsError }, { data: memberships }, { data: requests }, { data: profile }] = await Promise.all([
     supabase.from("community_groups").select("id,slug,name,description,owner_id,owner_name,member_count,created_at").order("member_count", { ascending: false }).order("created_at", { ascending: false }),
     supabase.from("community_group_members").select("group_id,role").eq("user_id", user.id),
+    supabase.from("community_group_requests").select("group_id,user_id,requester_name,status,requested_at").order("requested_at", { ascending: false }),
     supabase.from("profiles").select("username").eq("id", user.id).maybeSingle(),
   ]);
   if (groupsError) throw new Error("Could not load the community.");
@@ -50,6 +51,7 @@ export default async function CommunityPage({
         userName={profile?.username?.trim() || "student"}
         groups={typedGroups}
         memberships={(memberships ?? []).map((item) => ({ groupId: item.group_id, role: item.role }))}
+        membershipRequests={(requests ?? []).map((item) => ({ groupId: item.group_id, userId: item.user_id, requesterName: item.requester_name, status: item.status, requestedAt: item.requested_at }))}
         selectedGroup={selectedGroup}
         posts={typedPosts}
         comments={(comments ?? []) as CommunityComment[]}

@@ -2,6 +2,11 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  experimental: {
+    // Admin-only Mathpix screenshots are forwarded through a Server Action.
+    // All other learning-content images upload directly to Supabase Storage.
+    serverActions: { bodySizeLimit: "6mb" },
+  },
   async headers() {
     const production = process.env.NODE_ENV === "production";
     const policy = [

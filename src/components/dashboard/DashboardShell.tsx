@@ -5,7 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, PanelLeftOpen } from "lucide-react";
 import Sidebar from "./Sidebar";
 
-export default function DashboardShell({ email, children, rail }: { email: string; children: ReactNode; rail: ReactNode }) {
+export default function DashboardShell({ email, isAdmin, children, rail }: { email: string; isAdmin: boolean; children: ReactNode; rail: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [reopened, setReopened] = useState(false);
   const router = useRouter();
@@ -19,7 +19,7 @@ export default function DashboardShell({ email, children, rail }: { email: strin
 
   return (
     <div className={`dash-layout${collapsed ? " sidebar-collapsed" : ""}`}>
-      {!collapsed && <Sidebar email={email} initialOpen={reopened} onClose={() => setCollapsed(true)} />}
+      {!collapsed && <Sidebar email={email} isAdmin={isAdmin} initialOpen={reopened} onClose={() => setCollapsed(true)} />}
       <main className="dash-main">
         <div className="dash-toolbar">
           {collapsed && <button className="dash-tool" onClick={() => { setReopened(true); setCollapsed(false); }} title="Open sidebar" aria-label="Open sidebar"><PanelLeftOpen size={20} /></button>}
