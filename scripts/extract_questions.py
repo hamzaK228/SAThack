@@ -219,6 +219,18 @@ def html_to_text(html_text: str) -> str:
         return ""
     s = html_text
 
+    # College Board frequently emits the same value twice: once as the visible
+    # element and once as a `.sr-only` pronunciation/long-description fallback.
+    # Keeping both produces strings such as `km2k m squared` and
+    # `______blank`.  The visible content remains in the plain-text column;
+    # rich media keeps its own accessible label in the sanitized HTML column.
+    s = re.sub(
+        r'<([a-zA-Z0-9]+)\b[^>]*class=["\'][^"\']*\bsr-only\b[^"\']*["\'][^>]*>.*?</\1\s*>',
+        "",
+        s,
+        flags=re.DOTALL | re.IGNORECASE,
+    )
+
     # Replace <svg> figures with their accessible aria-label (drop vector path noise).
     def _svg_repl(match: re.Match) -> str:
         attrs = match.group(1)
