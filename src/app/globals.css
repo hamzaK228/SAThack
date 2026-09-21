@@ -3851,6 +3851,91 @@ strong {
    Question bank tree (1609-style)
    ========================================================================== */
 
+.bank-imported-sets {
+  margin-bottom: 1.25rem;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at 12% 0%, rgba(198, 255, 74, 0.11), transparent 34%),
+    var(--bg-2);
+}
+.bank-imported-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+.bank-imported-heading h2 {
+  margin-top: 0.15rem;
+  font-size: 1.05rem;
+}
+.bank-imported-heading > span {
+  color: var(--signal);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.75rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.bank-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+.bank-collection-card {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: rgba(8, 13, 20, 0.72);
+  transition: border-color 160ms ease-out, transform 160ms ease-out, box-shadow 160ms ease-out;
+}
+.bank-collection-card:hover,
+.bank-collection-card.active {
+  border-color: rgba(198, 255, 74, 0.48);
+  box-shadow: 0 12px 34px -24px rgba(198, 255, 74, 0.7);
+  transform: translateY(-2px);
+}
+.bank-collection-card.active {
+  background: linear-gradient(135deg, rgba(198, 255, 74, 0.09), rgba(8, 13, 20, 0.82));
+}
+.bank-collection-kicker {
+  color: var(--signal);
+  font-family: var(--font-mono), monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.bank-collection-card h3 {
+  margin: 0.3rem 0 0.25rem;
+  font-size: 0.98rem;
+}
+.bank-collection-card p {
+  color: var(--ink-dim);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+.bank-collection-card p strong {
+  color: var(--ink);
+}
+.bank-collection-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.45rem;
+}
+.bank-collection-actions .btn {
+  min-height: 38px;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
 .bank-progress {
   margin-bottom: 1.1rem;
 }
@@ -3916,8 +4001,26 @@ strong {
   align-items: start;
 }
 @media (max-width: 860px) {
+  .bank-collection-grid {
+    grid-template-columns: 1fr;
+  }
   .bank-tree {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .bank-imported-heading,
+  .bank-collection-card {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .bank-imported-heading > span {
+    white-space: normal;
+  }
+  .bank-collection-actions .btn {
+    flex: 1;
+    text-align: center;
   }
 }
 

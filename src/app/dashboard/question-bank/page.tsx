@@ -107,6 +107,39 @@ export default async function QuestionBankPage({
         </div>
       </div>
 
+      <section className="bank-imported-sets" aria-labelledby="imported-sets-title">
+        <div className="bank-imported-heading">
+          <div>
+            <p className="eyebrow">Imported collections</p>
+            <h2 id="imported-sets-title">New MSDC question sets</h2>
+          </div>
+          <span>{QUESTION_COLLECTIONS.reduce((sum, item) => sum + item.sourceIds.length, 0)} verified questions</span>
+        </div>
+        <div className="bank-collection-grid">
+          {QUESTION_COLLECTIONS.map((item) => {
+            const active = collection?.id === item.id;
+            const sectionLabel = item.section === "math" ? "Math" : "Reading & Writing";
+            return (
+              <article className={`bank-collection-card${active ? " active" : ""}`} key={item.id}>
+                <div>
+                  <span className="bank-collection-kicker">{sectionLabel} · PDF collection</span>
+                  <h3>{item.title}</h3>
+                  <p><strong>{item.sourceIds.length}</strong> official questions with answers and explanations</p>
+                </div>
+                <div className="bank-collection-actions">
+                  <Link className="btn btn-ghost" href={`/dashboard/question-bank?collection=${item.id}&status=all`}>
+                    {active ? "Viewing this set" : "View in bank"}
+                  </Link>
+                  <Link className="btn btn-primary" href={`/dashboard/session?collection=${item.id}&status=all`}>
+                    Start set
+                  </Link>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
       <div className="bank-progress">
         <div className="bank-progress-text">
           <strong>{answeredCount.toLocaleString()}</strong> of{" "}
