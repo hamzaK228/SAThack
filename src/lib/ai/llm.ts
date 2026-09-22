@@ -2,7 +2,7 @@ import { availableModels } from "./models";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 /** How long a single model call may take before we fall back to the corpus. */
-const DEFAULT_TIMEOUT_MS = 20_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 
 type ProviderResponse = {
   ok: boolean;
@@ -79,23 +79,42 @@ export async function chatCompletion(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
+    const isBigModel = new URL(base).hostname.endsWith("bigmodel.cn");
     const body = JSON.stringify({
       model,
       temperature: opts.temperature ?? 0.4,
+      max_tokens: 2048,
+      ...(model.toLowerCase().startsWith("glm-5.3")
+        ? { thinking: { type: "enabled" }, reasoning_effort: "low" }
+        : {}),
       ...(opts.json ? { response_format: { type: "json_object" } } : {}),
       messages: [{ role: "user", content: prompt }],
     });
     let res: ProviderResponse;
     try {
-      res = await fetch(`${base}/chat/completions`, {
-        method: "POST",
-        signal: controller.signal,
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body,
-      });
+      // Vercel's fetch can wait on an unreachable IPv6 route to BigModel until
+      // our global abort fires. BigModel publishes an IPv4 endpoint, so use the
+      // already-bounded Node transport first for that provider.
+      res = isBigModel
+        ? await postJsonIpv4(`${base}/chat/completions`, body, key, timeoutMs)
+        : await fetch(`${base}/chat/completions`, {
+            method: "POST",
+            signal: controller.signal,
+            headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+            body,
+          });
     } catch (error) {
       if (controller.signal.aborted) throw error;
-      res = await postJsonIpv4(`${base}/chat/completions`, body, key, timeoutMs);
+      if (isBigModel) {
+        res = await fetch(`${base}/chat/completions`, {
+          method: "POST",
+          signal: controller.signal,
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+          body,
+        });
+      } else {
+        res = await postJsonIpv4(`${base}/chat/completions`, body, key, timeoutMs);
+      }
     }
     if (!res.ok) {
       console.warn("[ai] Provider request declined; using local fallback", { status: res.status, model });
