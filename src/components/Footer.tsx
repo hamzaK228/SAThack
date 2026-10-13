@@ -1,3 +1,6 @@
+// Kept in one place so a custom domain later is a one-line change here.
+const ADMISSIONHACK = "https://admissionhack-seven.vercel.app";
+
 export default function Footer() {
   return (
     <footer className="site-footer">
@@ -14,6 +17,18 @@ export default function Footer() {
             <a href="#predictor">Score predictor</a>
             <a href="#plan">Study plan</a>
             <a href="#game">Gamification</a>
+          </div>
+          <div className="footer-col">
+            <h4>After the SAT</h4>
+            <a href={ADMISSIONHACK} target="_blank" rel="noreferrer">
+              AdmissionHack
+            </a>
+            <a href={`${ADMISSIONHACK}/universities`} target="_blank" rel="noreferrer">
+              University directory
+            </a>
+            <a href={`${ADMISSIONHACK}/scholarships`} target="_blank" rel="noreferrer">
+              Scholarships
+            </a>
           </div>
           <div className="footer-col">
             <h4>Company</h4>
