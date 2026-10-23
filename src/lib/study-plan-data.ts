@@ -70,7 +70,13 @@ function planSignature(input: {
   attempts: Attempt[];
   correct: number;
 }): string {
-  const latest = input.attempts[0]?.created_at ?? "none";
+  // Bucket the live counts. The narrative is a coaching summary, not a
+  // per-answer report; invalidating it on every attempt made the next dashboard
+  // render wait on a model call. It refreshes at most every 25 attempts / 10
+  // correct answers / new day.
+  const attemptBucket = Math.floor(input.attempts.length / 25);
+  const correctBucket = Math.floor(input.correct / 10);
+  const latestDay = input.attempts[0]?.created_at?.slice(0, 10) ?? "none";
   return [
     input.targetScore,
     input.currentScore ?? "-",
@@ -79,9 +85,9 @@ function planSignature(input: {
     // invalidate it or the plan keeps saying "seven weeks out" when it is five.
     input.testDate ?? "no-date",
     input.model ?? "default",
-    input.attempts.length,
-    input.correct,
-    latest,
+    attemptBucket,
+    correctBucket,
+    latestDay,
   ].join("|");
 }
 
@@ -226,7 +232,15 @@ async function loadPlan(force = false): Promise<PlanBundle | null> {
     }
   }
 
-  const generated = await generatePlan(ctx, model, narrative);
+  // A fresh narrative costs an AI call. Force (the "Re-plan" action) already
+  // consumed the quota before calling in; a normal render consumes it here and
+  // falls back to the local narrative when the day's budget is gone.
+  let allowAi = true;
+  if (!narrative && !force) {
+    const { data: permitted, error: quotaError } = await supabase.rpc("consume_ai_quota");
+    allowAi = !quotaError && permitted === true;
+  }
+  const generated = await generatePlan(ctx, model, narrative, allowAi);
 
   // Reusing the narrative leaves nothing to persist; a fresh one is saved so
   // every later render (and navigation) is instant.

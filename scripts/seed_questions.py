@@ -52,10 +52,20 @@ def main():
         "is_grid_in, is_official"
     )
 
+    # Idempotent upsert: never delete the official bank. Re-seeding updates the
+    # content of existing rows (keeping their UUIDs, attempts, saved questions
+    # and practice-test references) and inserts only genuinely new source_ids.
+    conflict = (
+        "on conflict (source_id) do update set "
+        "section = excluded.section, domain = excluded.domain, skill = excluded.skill, "
+        "difficulty = excluded.difficulty, passage = excluded.passage, "
+        "passage_html = excluded.passage_html, question_text = excluded.question_text, "
+        "question_text_html = excluded.question_text_html, choices = excluded.choices, "
+        "correct_answer = excluded.correct_answer, explanation = excluded.explanation, "
+        "is_grid_in = excluded.is_grid_in"
+    )
+
     lines = []
-    # Clear any previously-imported official questions (the broken PDF import).
-    lines.append("delete from public.questions where is_official = true;")
-    lines.append("")
 
     batch = []
     for q in questions:
@@ -72,13 +82,15 @@ def main():
         batch.append(values)
         if len(batch) >= args.batch:
             lines.append(f"insert into public.questions ({columns}) values")
-            lines.append(",\n".join(batch) + ";")
+            lines.append(",\n".join(batch))
+            lines.append(conflict + ";")
             lines.append("")
             batch = []
 
     if batch:
         lines.append(f"insert into public.questions ({columns}) values")
-        lines.append(",\n".join(batch) + ";")
+        lines.append(",\n".join(batch))
+        lines.append(conflict + ";")
         lines.append("")
 
     with open(args.out, "w", encoding="utf-8") as fh:

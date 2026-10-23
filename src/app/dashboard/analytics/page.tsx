@@ -65,13 +65,21 @@ export default async function AnalyticsPage() {
   };
   const reasonRows = [...reasonCounts.entries()].sort((a, b) => b[1] - a[1]);
 
-  const { data: attempts } = await supabase
-    .from("practice_attempts")
-    .select("question_id, section, domain, is_correct, created_at")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: true });
-
-  const list = (attempts ?? []) as Attempt[];
+  // Paginated: a single request stops at the PostgREST max-rows cap, which
+  // silently froze analytics for the first heavy user to cross 1,000 attempts.
+  const list: Attempt[] = [];
+  const ATTEMPT_PAGE = 1000;
+  for (let from = 0; ; from += ATTEMPT_PAGE) {
+    const { data } = await supabase
+      .from("practice_attempts")
+      .select("question_id, section, domain, is_correct, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: true })
+      .range(from, from + ATTEMPT_PAGE - 1);
+    const rows = (data ?? []) as Attempt[];
+    list.push(...rows);
+    if (rows.length < ATTEMPT_PAGE) break;
+  }
 
   // Counting rule, shared with the right rail and the boss/leaderboard views:
   // every question counts ONCE, and its status is decided by its latest attempt.

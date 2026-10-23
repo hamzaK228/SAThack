@@ -97,7 +97,7 @@ export default async function StudentProfilePage({
           <span className="dash-stat-value accent">{profile.accuracy}%</span>
         </div>
         <div className="dash-stat-card">
-          <span className="dash-stat-label">Day streak</span>
+          <span className="dash-stat-label">Active days</span>
           <span className="dash-stat-value">🔥 {profile.streak}</span>
         </div>
       </div>

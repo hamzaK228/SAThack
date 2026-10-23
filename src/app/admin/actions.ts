@@ -189,12 +189,19 @@ export async function updateQuestion(form: FormData): Promise<AdminActionResult>
     return { ok: false, message: "Complete the question, skill, four choices, and correct answer." };
   }
 
-  const figuresOf = (html: string | null) => (html ?? "").match(/<figure[\s\S]*?<\/figure>/g)?.join("") ?? "";
+  // Keep every embedded media block, not just `<figure>`. The extractor stores
+  // 51 official questions with a bare `<table>`/`<svg>` outside a figure; the
+  // old figure-only rebuild silently deleted those on save.
+  const mediaOf = (html: string | null) =>
+    [...(html ?? "").matchAll(/<(figure|table|svg)\b[\s\S]*?<\/\1>|<img\b[^>]*>/gi)]
+      .map((match) => match[0])
+      .join("");
   const rebuild = (html: string | null, text: string) => {
     if (!html) return null;
-    const figures = figuresOf(html);
-    if (!figures) return textHtml(text);
-    return html.trimStart().startsWith("<figure") ? `${figures}${textHtml(text)}` : `${textHtml(text)}${figures}`;
+    const media = mediaOf(html);
+    if (!media) return textHtml(text);
+    const leadsWithMedia = /^\s*<(figure|table|svg|img)\b/i.test(html);
+    return leadsWithMedia ? `${media}${textHtml(text)}` : `${textHtml(text)}${media}`;
   };
 
   const { error } = await context.supabase

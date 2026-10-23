@@ -23,15 +23,6 @@ export default async function LeaderboardPage() {
   if (!user) return null;
 
   // --- my progress (derived, never stored) --------------------------------
-  const { count: attempts } = await supabase
-    .from("practice_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id);
-  const { count: correct } = await supabase
-    .from("practice_attempts")
-    .select("*", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .eq("is_correct", true);
   const { count: tests } = await supabase
     .from("test_sessions")
     .select("*", { count: "exact", head: true })
@@ -44,8 +35,7 @@ export default async function LeaderboardPage() {
     .gt("times_seen", 0);
 
   // My questions: each counts ONCE, with the status of its latest attempt —
-  // the same rule as the right rail, the analytics page and the question bank.
-  // (XP and badges above stay per attempt, so a retry still earns.)
+  // the same rule as the right rail, the analytics page, XP and badges.
   const stamps: string[] = [];
   const questionState = new Map<string, boolean>();
   const PAGE = 1000;
@@ -70,8 +60,9 @@ export default async function LeaderboardPage() {
 
   const { streak, bestStreak, activeDays } = streakFrom(stamps);
   const stats: ProgressStats = {
-    attempts: attempts ?? 0,
-    correct: correct ?? 0,
+    // XP and badge accuracy use one result per question, not every retry.
+    attempts: practiced,
+    correct: solved,
     tests: tests ?? 0,
     vocabReviews: vocabReviews ?? 0,
     activeDays,
@@ -244,7 +235,7 @@ export default async function LeaderboardPage() {
                       <th scope="col">XP</th>
                       <th scope="col">Questions</th>
                       <th scope="col">Accuracy</th>
-                      <th scope="col">Streak</th>
+                      <th scope="col">Active days</th>
                     </tr>
                   </thead>
                   <tbody>

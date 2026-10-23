@@ -23,7 +23,13 @@ export type ProgressStats = {
   bestStreak: number;
 };
 
-/** Total XP for a set of progress stats. */
+/**
+ * Total XP for a set of progress stats.
+ *
+ * Callers pass *distinct-question* counts for `attempts`/`correct` (one latest
+ * result per question), so replaying a question no longer mints XP. The SQL
+ * twin in `leaderboard()` uses the same rule.
+ */
 export function xpFor(s: Pick<ProgressStats, "attempts" | "correct" | "tests" | "vocabReviews" | "activeDays">): number {
   return (
     s.attempts * XP_PER_ATTEMPT +

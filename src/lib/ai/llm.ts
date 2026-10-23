@@ -2,7 +2,10 @@ import { availableModels } from "./models";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 /** How long a single model call may take before we fall back to the corpus. */
-const DEFAULT_TIMEOUT_MS = 60_000;
+const DEFAULT_TIMEOUT_MS = 20_000;
+/** Ceiling even if the environment asks for longer (the old 120 s env value
+ *  could hold a dashboard/plan render past the serverless function limit). */
+const MAX_TIMEOUT_MS = 20_000;
 
 export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 
@@ -80,7 +83,9 @@ export async function chat(
   const model = opts.model && allowed.includes(opts.model) ? opts.model : allowed[0];
 
   const configured = Number(process.env.SAT_AI_TIMEOUT_MS);
-  const timeoutMs = Number.isFinite(configured) && configured > 0 ? configured : DEFAULT_TIMEOUT_MS;
+  const timeoutMs = Number.isFinite(configured) && configured > 0
+    ? Math.min(configured, MAX_TIMEOUT_MS)
+    : DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 

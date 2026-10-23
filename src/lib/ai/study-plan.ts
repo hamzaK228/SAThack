@@ -267,7 +267,9 @@ function localPlan(ctx: PlanContext, analysis: ReturnType<typeof analyzeContext>
 export async function generatePlan(
   ctx: PlanContext,
   model?: string | null,
-  reuse?: PlanNarrative | null
+  reuse?: PlanNarrative | null,
+  /** False when the daily AI budget is exhausted: build the local narrative. */
+  allowAi = true
 ): Promise<GeneratedPlan> {
   const analysis = analyzeContext(ctx);
   const statsMap = new Map(ctx.domainStats.map((d) => [d.domain, d]));
@@ -308,7 +310,9 @@ export async function generatePlan(
   const book = knowledgeForTopic(weakDomains, ctx.skillStats.slice(0, 5).map((s) => s.skill), 6);
   const bookSnippets = book.map((c) => c.text);
 
-  const raw = await chatCompletion(buildPrompt(ctx, analysis, bookSnippets), { json: true, model });
+  const raw = allowAi
+    ? await chatCompletion(buildPrompt(ctx, analysis, bookSnippets), { json: true, model })
+    : "";
 
   if (raw) {
     try {

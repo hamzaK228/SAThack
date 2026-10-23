@@ -12,18 +12,39 @@ import { chatCompletion } from "@/lib/ai/llm";
  * tomorrow — the honest escape hatch that keeps a bad evening from turning into
  * an abandoned plan. The task itself is untouched: the plan still holds it.
  */
-export async function snoozePlanTask(taskKey: string): Promise<void> {
+export async function snoozePlanTask(
+  keyValue: string,
+  week: number,
+  title: string,
+  kind: string,
+  domain: string | null,
+  minutes: number,
+  questionCount: number,
+): Promise<void> {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return;
 
-  const key = taskKey.trim().slice(0, 200);
+  const key = keyValue.trim().slice(0, 200);
   if (!key) return;
 
+  // plan_tasks.week/title are NOT NULL. The old upsert wrote only task_key and
+  // snoozed_until, so "Not today" silently failed for every unticked task.
   const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-  await supabase
-    .from("plan_tasks")
-    .upsert({ user_id: user.id, task_key: key, snoozed_until: tomorrow }, { onConflict: "user_id,task_key" });
+  await supabase.from("plan_tasks").upsert(
+    {
+      user_id: user.id,
+      task_key: key,
+      week: Math.max(1, Math.floor(Number(week) || 1)),
+      title: String(title || "Study step").slice(0, 200),
+      kind: String(kind || "practice").slice(0, 20),
+      domain: domain ? String(domain).slice(0, 80) : null,
+      minutes: Math.min(600, Math.max(5, Math.floor(Number(minutes) || 15))),
+      question_count: Math.max(0, Math.floor(Number(questionCount) || 0)),
+      snoozed_until: tomorrow,
+    },
+    { onConflict: "user_id,task_key" }
+  );
 
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/plan");
@@ -83,12 +104,20 @@ export async function proposePlanAdjustments(): Promise<void> {
   const user = await getCurrentUser();
   if (!user) return;
 
+  // The adjustment call is the AI work; take the budget first so the plan
+  // reload's own narrative refresh cannot consume the slot a moment earlier.
+  const { data: permitted, error: quotaError } = await supabase.rpc("consume_ai_quota");
+  if (quotaError || !permitted) return;
+
   const bundle = await getStudyPlan();
   if (!bundle) return;
   const { plan, skillStats, recentQuestionsPerDay } = bundle;
 
+  // Only tasks with a difficulty can receive harder/easier, and only practice
+  // tasks are meaningful to snooze through this agent. This keeps every
+  // proposal executable instead of storing a no-op.
   const open = plan.tasks
-    .filter((task) => !plan.done[taskKey(task)] && task.kind !== "diagnostic")
+    .filter((task) => !plan.done[taskKey(task)] && task.kind === "practice" && task.difficulty)
     .sort((a, b) => a.week - b.week || a.day - b.day)
     .slice(0, 6);
   if (!open.length) return;
@@ -162,31 +191,51 @@ export async function decidePlanAdjustment(form: FormData): Promise<void> {
 
   const { data: row } = await supabase
     .from("plan_adjustments")
-    .select("id, task_key, action")
+    .select("id, task_key, action, title")
     .eq("id", id)
     .eq("user_id", user.id)
     .maybeSingle();
   if (!row) return;
 
+  // The task row has to carry week/title/kind as well; they are NOT NULL.
+  const bundle = await getStudyPlan();
+  const task = bundle?.plan.tasks.find((item) => taskKey(item) === row.task_key);
+  const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  const base = {
+    user_id: user.id,
+    task_key: row.task_key,
+    week: Math.max(1, Math.floor(task?.week ?? 1)),
+    title: String(task?.title ?? row.title ?? "Study step").slice(0, 200),
+    kind: String(task?.kind ?? "practice").slice(0, 20),
+    domain: task?.domain ?? null,
+    minutes: Math.min(600, Math.max(5, Math.floor(task?.minutes ?? 15))),
+    question_count: Math.max(0, Math.floor(task?.questionCount ?? 0)),
+  };
+
+  let supported = true;
   if (decision === "accept") {
     if (row.action === "snooze") {
-      const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      await supabase
-        .from("plan_tasks")
-        .upsert({ user_id: user.id, task_key: row.task_key, snoozed_until: tomorrow }, { onConflict: "user_id,task_key" });
+      await supabase.from("plan_tasks").upsert(
+        { ...base, snoozed_until: tomorrow },
+        { onConflict: "user_id,task_key" }
+      );
+    } else if (task?.difficulty) {
+      await supabase.from("plan_tasks").upsert(
+        { ...base, difficulty_override: row.action === "harder" ? "hard" : "easy" },
+        { onConflict: "user_id,task_key" }
+      );
     } else {
-      await supabase
-        .from("plan_tasks")
-        .upsert(
-          { user_id: user.id, task_key: row.task_key, difficulty_override: row.action === "harder" ? "hard" : "easy" },
-          { onConflict: "user_id,task_key" }
-        );
+      // A stale proposal for a task with no difficulty; do not pretend it applied.
+      supported = false;
     }
   }
 
   await supabase
     .from("plan_adjustments")
-    .update({ status: decision === "accept" ? "accepted" : "dismissed", decided_at: new Date().toISOString() })
+    .update({
+      status: decision === "accept" && supported ? "accepted" : "dismissed",
+      decided_at: new Date().toISOString(),
+    })
     .eq("id", id)
     .eq("user_id", user.id);
 

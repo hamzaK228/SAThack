@@ -68,9 +68,9 @@ than failing. Turn the digest on per student in **Settings → Weekly digest**.
 
 ### Security hardening (same release)
 
-Apply `supabase/migrations/20261023130000_security_hardening.sql` **with the
-matching application deploy**, not before it. It closes the audit's P0 answer-key
-read:
+Apply `supabase/migrations/20261023130000_security_hardening.sql` and
+`supabase/migrations/20261023140000_xp_and_reveal_cap.sql` **with the matching
+application deploy**, not before it. They close the audit's P0 answer-key read:
 
 - `questions.correct_answer` / `explanation` are no longer selectable by
   `authenticated`; the table exposes only safe columns.
@@ -83,18 +83,35 @@ read:
   re-check `is_admin()` in the database.
 - Guest duel is limited to a fixed 48-question demo pool (`guest_demo`), so the
   anonymous check cannot enumerate the bank.
+- Explanations have a 250-per-UTC-day budget per student; the same question
+  counts once. Admins are exempt.
 
 The teaching rule is unchanged: a question's explanation unlocks after the
 student attempts it. Keys are no longer readable before an attempt, and they are
 never exposed as a table column to ordinary clients.
 
-### Other audit items still open (not part of this hardening pass)
+### Other audit items fixed in this batch
 
-- Plan “Not today” / accepted AI adjustments fail on a fresh plan (NOT NULL).
-- AI narrative generation runs on the render path with a 120 s timeout and
-  bypasses the per-user quota.
-- Analytics still needs pagination at 1,000 attempts.
-- Every answered question still triggers a full-route refresh, and the
-  leaderboard RPC remains a global scan.
-- The admin question editor can drop tables/SVGs not wrapped in `<figure>`.
-- `seed_questions.py` is destructive on re-run.
+- Plan “Not today” and accepted difficulty adjustments now write the required
+  `plan_tasks` metadata; the agent only proposes practice tasks with a
+  difficulty it can actually change.
+- AI calls are capped at 20 seconds, plan narratives refresh in buckets instead
+  of on every attempt, and plan/adjustment calls consume the daily quota.
+- Analytics paginates the full attempt history.
+- The right rail no longer refreshes the whole route after every drill answer.
+- The admin editor preserves bare tables, SVGs and images.
+- `seed_questions.py` upserts by `source_id` instead of deleting the bank.
+- Leaderboard XP counts each question once; labels say “Active days”.
+
+### Still open
+
+- The leaderboard RPC remains a global scan (now indexed); it needs a
+  materialized per-user stats table before it is cheap at much larger scale.
+- Share links/cards still compute their XP through `leaderboard(1000)`; the card
+  is cached, but a materialized stats table would remove the scan.
+- Legacy `ah_*` / `ielts_*` tables and functions still share the database.
+- Authenticated browser flows have not been exercised end-to-end (no QA
+  credentials); DB RLS/RPC paths and public routes are tested.
+- The digest is still disabled until the env vars above are set.
+- The guest static fallback IDs predate the current bank; the live RPC demo pool
+  is the source of truth.

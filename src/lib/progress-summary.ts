@@ -34,8 +34,16 @@ export const getProgressSummary = cache(async () => {
   if (summaryResult.error) throw new Error("Could not load your progress.");
   const summary = summaryResult.data as { attempts: number; correct: number; tests: number; vocabReviews: number; days: Record<string, number>; recent: { domain: string; is_correct: boolean; created_at: string }[] };
   const streak = streakFrom(Object.keys(summary.days));
-  const xp = xpFor({ ...summary, activeDays: streak.activeDays });
   const solved = [...attemptsResult.values()].filter(Boolean).length;
+  // XP follows the same latest-attempt rule as the leaderboard and accuracy:
+  // one question, one reward. The raw attempt counts stay available for the
+  // activity log but never mint XP.
+  const xp = xpFor({
+    ...summary,
+    attempts: attemptsResult.size,
+    correct: solved,
+    activeDays: streak.activeDays,
+  });
   return {
     ...summary,
     practiced: attemptsResult.size,

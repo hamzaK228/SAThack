@@ -14,6 +14,11 @@ Deeper technical notes live in `DEPLOYMENT.md` and in the code comments.
 ### Plan and analytics
 - **Test-day projection.** A conservative straight-line projection from your last scored tests, with a confidence label. *See:* `/dashboard/analytics`.
 - **Question reports.** Any drill question has a "Report a problem" control; admins triage reports at `/admin/reports`.
+- **“Not today” actually works.** Snoozing a fresh step now stores the required week/title fields instead of silently failing. *See:* the today card → "Not today".
+- **Analytics past 1,000 attempts.** The page paginates the full history; it no longer freezes at the first 1,000 answers.
+- **XP counts a question once.** The leaderboard, badges and right-rail XP use the latest result per question, matching accuracy and question counts. Rows now say "Active days" instead of the misleading "Streak".
+- **No mid-drill refresh.** The right rail no longer re-renders the whole session after every answer; it updates on the next navigation.
+- **Faster, budgeted coaching.** Plan narratives refresh in buckets, use at most a 20-second model call, and consume the same daily AI budget as the tutor.
 
 ### Sharing and community
 - **Parent/mentor link.** Create an expiring, revocable read-only progress link in Settings; it shows stats and recent tests, never answers or email. *See:* `/dashboard/settings` → "Share progress"; the public page is `/share/<token>`.
@@ -27,6 +32,9 @@ Deeper technical notes live in `DEPLOYMENT.md` and in the code comments.
 - **Answer keys off the table.** `questions.correct_answer` / `explanation` are no longer readable columns for ordinary clients. Grading, retries and explanations go through server RPCs; the key unlocks only after a real attempt. Saved answers now say "Unlocks after your first attempt."
 - **Attempt writes are server-mediated.** `practice_attempts` no longer accepts direct browser inserts; `record_attempt()` validates and rate-limits them, so the leaderboard cannot be filled with scripted rows.
 - **Guest duel demo pool.** The anonymous duel now uses a fixed 48-question demo set instead of randomly sampling the whole bank, so its answer check cannot enumerate the question bank.
+- **Explanation budget.** A student can unlock at most 250 question explanations per UTC day; the same question only counts once. This keeps the teaching feature from becoming a bulk key dump.
+- **Admin edits keep media.** The question editor now preserves bare `<table>`, `<svg>` and `<img>` blocks outside `<figure>`, not just figures.
+- **Idempotent seed.** `seed_questions.py` now upserts by `source_id`; re-running it no longer deletes the official bank or breaks attempts and saved questions.
 
 ## 2026-10-10
 

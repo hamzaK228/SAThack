@@ -93,7 +93,18 @@ export default async function WeeklyPlan() {
                 </span>
               </div>
               <div className="today-step-actions">
-                <form action={snoozePlanTask.bind(null, taskKey(task))}>
+                <form
+                  action={snoozePlanTask.bind(
+                    null,
+                    taskKey(task),
+                    task.week,
+                    task.title,
+                    task.kind,
+                    task.domain,
+                    task.minutes,
+                    task.questionCount
+                  )}
+                >
                   <button className="today-skip" type="submit" title="Move this step to tomorrow">
                     Not today
                   </button>
