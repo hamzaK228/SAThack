@@ -35,3 +35,41 @@ test('screen-reader blank labels do not appear next to printed underscores', () 
   assert.equal(mathTextToHtml('around the ______blank When'), 'around the ______ When');
   assert.equal(mathTextToHtml('Fill in the blank.'), 'Fill in the blank.');
 });
+
+test('chat markdown-lite: bold renders, headings strip, injection stays escaped', () => {
+  assert.equal(
+    mathTextToHtml('**two-pass pacing** wins'),
+    '<strong>two-pass pacing</strong> wins',
+  );
+  // The renderer deliberately turns Markdown-style list markers into a bullet.
+  assert.equal(mathTextToHtml('### Pass 1\n- flag it'), 'Pass 1\n• flag it');
+  // Bold is applied after escaping, so it can never smuggle in markup.
+  assert.equal(
+    mathTextToHtml('**<script>alert(1)</script>**'),
+    '<strong>&lt;script&gt;alert(1)&lt;/script&gt;</strong>',
+  );
+  // Question-style hashes without a following space are untouched.
+  assert.equal(mathTextToHtml('Question #5 of 22'), 'Question #5 of 22');
+  // Markdown inside a math run is left for KaTeX.
+  assert.match(mathTextToHtml('$x^2$ **bold**'), /<strong>bold<\/strong>/);
+});
+
+test('currency prose between two $ signs renders literally, not as math', () => {
+  // The boat-rental class of stored question text: two raw currency dollars.
+  const text = 'The boat rental costs $60 per hour, and she will also have to pay for a water safety course that costs $15.';
+  const rendered = mathTextToHtml(text);
+  assert.match(rendered, /\$60 per hour/);
+  assert.match(rendered, /costs \$15/);
+  assert.equal(rendered.includes('katex'), false);
+});
+
+test('real math and math-wrapped numbers still render via KaTeX', () => {
+  assert.match(mathTextToHtml('A length of $4$ inches and $x^2-5x+6=0$.'), /katex/);
+  assert.match(mathTextToHtml('She earns $13.50z$ dollars.'), /katex/);
+  assert.match(mathTextToHtml('An initial value of $\\$890$ doubled every $10$ years.'), /katex/);
+});
+
+test('latex commands and \\text runs are never treated as prose', () => {
+  assert.match(mathTextToHtml('$35\\text{miles per hour}$'), /katex/);
+  assert.match(mathTextToHtml('$\\frac{8-\\sqrt{k}}{4}$'), /katex/);
+});

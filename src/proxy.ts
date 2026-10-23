@@ -36,20 +36,30 @@ export async function proxy(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value }) =>
+        setAll(cookiesToSet, headersToSet) {
+          // NEVER write empty-value cookies from here. Sign-out happens
+          // client-side, so a server-side clear is always the refresh race
+          // losing — its sibling request just rotated the tokens and this
+          // response would otherwise land afterwards and wipe the fresh
+          // session (the "randomly signed out" bug).
+          const keep = cookiesToSet.filter(({ value }) => Boolean(value));
+          keep.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
+          keep.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
+          );
+          Object.entries(headersToSet).forEach(([name, value]) =>
+            supabaseResponse.headers.set(name, value)
           );
         },
       },
     });
 
     // Refreshes the auth token and sets refreshed cookies.
-    await supabase.auth.getClaims();
+    const { error } = await supabase.auth.getClaims();
+    if (error) warnOnce("[proxy] Supabase session validation failed; continuing as signed out.", error);
   } catch (error) {
     // Malformed URL, unreachable project, etc. — still don't take the site down.
     warnOnce("[proxy] Supabase session refresh failed; continuing without it.", error);

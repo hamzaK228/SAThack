@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
-import MathText from "@/components/MathText";
-import QuestionText from "@/components/QuestionText";
-import UnsaveButton from "@/components/dashboard/UnsaveButton";
+import SavedQuestions from "@/components/dashboard/SavedQuestions";
 
 export const dynamic = "force-dynamic";
 
@@ -19,65 +16,32 @@ export default async function SavedPage() {
     .order("created_at", { ascending: false });
 
   const qids = (saved ?? []).map((s) => s.question_id);
-  const { data: qs } = qids.length
-    ? await supabase
-        .from("questions")
-        .select(
-          "id, question_text, question_text_html, domain, difficulty, correct_answer, explanation"
-        )
-        .in("id", qids)
-    : { data: null };
-
-  const qmap = new Map((qs ?? []).map((q) => [q.id, q]));
+  // Chunked: one `.in()` with hundreds of uuids exceeds the REST gateway's URL
+  // length and comes back 400, which would silently blank the whole page.
+  type SavedRow = {
+    id: string;
+    question_text: string;
+    question_text_html: string | null;
+    passage: string | null;
+    passage_html: string | null;
+    domain: string | null;
+    difficulty: string | null;
+  };
+  const qmap = new Map<string, SavedRow>();
+  for (let index = 0; index < qids.length; index += 500) {
+    const { data: qs } = await supabase
+      .from("questions")
+      .select("id, question_text, question_text_html, passage, passage_html, domain, difficulty")
+      .in("id", qids.slice(index, index + 500));
+    for (const question of (qs ?? []) as SavedRow[]) qmap.set(question.id, question);
+  }
   const ordered = qids
     .map((id) => qmap.get(id))
-    .filter((q): q is NonNullable<typeof q> => Boolean(q));
+    .filter((q): q is SavedRow => Boolean(q));
 
   return (
     <div className="dash-page">
-      <div className="dash-head">
-        <div>
-          <h1 className="dash-title">Saved</h1>
-          <p className="dash-sub">Questions you want to come back to.</p>
-        </div>
-      </div>
-
-      <div className="dash-card">
-        {ordered.length > 0 ? (
-          <ul className="saved-list">
-            {ordered.map((q) => (
-              <li className="saved-card" key={q.id}>
-                <div className="saved-head">
-                  <span className="session-chip">{q.difficulty}</span>
-                  <span className="session-chip">{q.domain}</span>
-                  <Link className="qb-practice" href={`/dashboard/session?q=${q.id}`}>
-                    Practice →
-                  </Link>
-                  <UnsaveButton questionId={q.id} />
-                </div>
-                <div className="saved-question">
-                  <QuestionText html={q.question_text_html} text={q.question_text} />
-                </div>
-                <details className="saved-explanation">
-                  <summary>Answer &amp; explanation</summary>
-                  <p className="saved-answer">
-                    Correct answer: <strong className="ok">{q.correct_answer}</strong>
-                  </p>
-                  {q.explanation && <MathText text={q.explanation} />}
-                </details>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <div className="dash-empty">
-            <p>Nothing saved yet. Tap ☆ Save on any question to keep it here.</p>
-            <Link className="btn btn-primary" href="/dashboard/session" style={{ marginTop: "1rem" }}>
-              Start a session
-            </Link>
-          </div>
-        )}
-      </div>
+      <SavedQuestions questions={ordered} />
     </div>
   );
 }
-

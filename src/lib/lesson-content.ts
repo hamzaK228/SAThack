@@ -162,7 +162,7 @@ export const LESSONS: Record<string, LessonDefinition> = {
     domain: "Algebra",
     section: "Math",
     description: "Translate, solve, and interpret linear equations, inequalities, functions, and systems.",
-    skills: ["Linear equations", "Linear functions", "Systems", "Linear inequalities"],
+    skills: ["Linear equations in one variable", "Linear functions", "Systems of two linear equations in two variables", "Linear inequalities in one or two variables"],
     method: [
       { title: "Define the unknown", detail: "Write what each variable represents, including units, before building an equation." },
       { title: "Translate relationships", detail: "Rate becomes slope, starting value becomes intercept, and constraints become equations or inequalities." },
@@ -171,7 +171,7 @@ export const LESSONS: Record<string, LessonDefinition> = {
     ],
     example: {
       label: "Worked example · linear model",
-      prompt: "A service charges a $12 starting fee plus $4 per hour. Write the total cost C after h hours and find the cost for 5 hours.",
+      prompt: "A service charges a \\$12 starting fee plus \\$4 per hour. Write the total cost C after h hours and find the cost for 5 hours.",
       steps: ["Starting fee = y-intercept 12.", "Hourly rate = slope 4.", "Model: $C=4h+12$; substitute $h=5$."],
       answer: "$C=4(5)+12=32$, so the cost is $32$.",
     },
@@ -190,7 +190,7 @@ export const LESSONS: Record<string, LessonDefinition> = {
     domain: "Advanced Math",
     section: "Math",
     description: "Use structure to rewrite and solve quadratic, exponential, polynomial, rational, radical, and absolute-value expressions.",
-    skills: ["Equivalent expressions", "Nonlinear equations", "Nonlinear functions", "Systems"],
+    skills: ["Equivalent expressions", "Nonlinear equations in one variable and systems of equations in two variables", "Nonlinear functions"],
     method: [
       { title: "Identify the family", detail: "Look for squared variables, repeated factors, exponents, radicals, or variables in denominators." },
       { title: "Choose a revealing form", detail: "Factored form shows zeros, vertex form shows extrema, and exponential form shows growth or decay." },
@@ -218,7 +218,7 @@ export const LESSONS: Record<string, LessonDefinition> = {
     domain: "Problem-Solving and Data Analysis",
     section: "Math",
     description: "Reason with units, ratios, percentages, probability, data displays, studies, and statistical claims.",
-    skills: ["Rates and units", "Percentages", "Data", "Probability", "Statistical inference"],
+    skills: ["Ratios, rates, proportional relationships, and units", "Percentages", "One-variable data: Distributions and measures of center and spread", "Probability and conditional probability", "Inference from sample statistics and margin of error"],
     method: [
       { title: "Write units everywhere", detail: "Units reveal whether to multiply or divide and expose invalid answers before calculation." },
       { title: "Choose the correct base", detail: "Percent change is $(new-old)/old$. The original amount is always the denominator." },
@@ -227,7 +227,7 @@ export const LESSONS: Record<string, LessonDefinition> = {
     ],
     example: {
       label: "Worked example · percent change",
-      prompt: "A price rises from $80 to $92. What is the percent increase?",
+      prompt: "A price rises from \\$80 to \\$92. What is the percent increase?",
       steps: ["Change: $92-80=12$.", "Original value: 80.", "$12/80=0.15$."],
       answer: "The price increased by 15%.",
     },
@@ -246,7 +246,7 @@ export const LESSONS: Record<string, LessonDefinition> = {
     domain: "Geometry and Trigonometry",
     section: "Math",
     description: "Model figures with area, volume, angles, similarity, right-triangle trigonometry, and circle relationships.",
-    skills: ["Area and volume", "Lines and angles", "Triangles", "Trigonometry", "Circles"],
+    skills: ["Area and volume", "Lines, angles, and triangles", "Right triangles and trigonometry", "Circles"],
     method: [
       { title: "Draw and label", detail: "Transfer every length, angle, and relationship to a clean diagram; mark what must be found." },
       { title: "Find the governing relationship", detail: "Use similarity, the Pythagorean theorem, SOH-CAH-TOA, or a circle theorem before substituting numbers." },

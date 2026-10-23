@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 const desktopLinks = [
+  { href: "/duel", label: "Duel" },
   { href: "#how", label: "How it works" },
   { href: "#plan", label: "Study plan" },
   { href: "#predictor", label: "Score predictor" },
@@ -12,6 +13,7 @@ const desktopLinks = [
 ];
 
 const mobileLinks = [
+  { href: "/duel", label: "Duel" },
   { href: "#how", label: "How it works" },
   { href: "#plan", label: "Study plan" },
   { href: "#predictor", label: "Score predictor" },

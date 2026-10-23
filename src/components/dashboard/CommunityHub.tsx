@@ -348,7 +348,7 @@ export default function CommunityHub({
             {studentSearched && !searching && (
               <div className="community-user-results" role="status">
                 {studentResults.length ? studentResults.map((student) => (
-                  <div key={student.id}><span className="community-avatar small">{initials(student.username)}</span><span><strong>@{student.username}</strong><small>{student.full_name}</small></span></div>
+                  <div key={student.id}><span className="community-avatar small">{initials(student.username)}</span><Link className="community-student" href={`/dashboard/u/${student.username}`}><strong>@{student.username}</strong><small>{student.full_name}</small></Link></div>
                 )) : <small>No matching students.</small>}
               </div>
             )}

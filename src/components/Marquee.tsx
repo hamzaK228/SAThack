@@ -10,12 +10,11 @@ const items = [
 ];
 
 export default function Marquee() {
-  const row = [...items, ...items];
   return (
     <div className="marquee" role="region" aria-label="Student score improvements">
       <div className="marquee-track">
-        {row.map((it, i) => (
-          <div className="marquee-item" key={`${it.name}-${i}`}>
+        {items.map((it) => (
+          <div className="marquee-item" key={`${it.name}-${it.after}`}>
             <strong>{it.name}</strong>
             <span>
               {it.before} → {it.after}
@@ -23,6 +22,19 @@ export default function Marquee() {
             <span className="lift">+{Number(it.after) - Number(it.before)}</span>
           </div>
         ))}
+        {/* The seamless loop needs a duplicate track; hide it from screen
+            readers so the list is announced once. */}
+        <div aria-hidden="true" className="marquee-clone">
+          {items.map((it) => (
+            <div className="marquee-item" key={`clone-${it.name}-${it.after}`}>
+              <strong>{it.name}</strong>
+              <span>
+                {it.before} → {it.after}
+              </span>
+              <span className="lift">+{Number(it.after) - Number(it.before)}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

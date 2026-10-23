@@ -105,7 +105,21 @@ export default async function LessonPage({
 
   return (
     <div className="dash-page lesson-page">
-      <Link className="lesson-back" href="/dashboard/plan"><ArrowLeft size={15} /> Back to study plan</Link>
+      <div className="lesson-topbar">
+        <Link className="lesson-back" href="/dashboard/plan">
+          <ArrowLeft size={15} /> Back to study plan
+        </Link>
+        {/* Opens the tutor with the topic already typed in — the question a
+            student actually has mid-lesson, instead of a blank box. */}
+        <Link
+          className="lesson-ask"
+          href={`/dashboard/tutor?q=${encodeURIComponent(
+            `Explain ${focusSkill ?? lesson.domain} in ${lesson.domain} — I'm working through it now.`
+          )}`}
+        >
+          Ask the tutor about this
+        </Link>
+      </div>
       <AdaptiveLesson
         key={`${lesson.domain}-${focusSkill}`}
         lesson={lesson}

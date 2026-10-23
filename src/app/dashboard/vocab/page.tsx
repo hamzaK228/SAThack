@@ -4,17 +4,19 @@ import { getCurrentUser } from "@/lib/supabase/auth";
 import VocabCards, { type VocabWord } from "@/components/dashboard/VocabCards";
 import { cleanExample, isDue, type VocabProgress } from "@/lib/vocab";
 import VocabContribution from "@/components/dashboard/VocabContribution";
+import VocabLists, { type VocabListSummary } from "@/components/dashboard/VocabLists";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 60;
-const VIEWS = ["all", "saved", "due"] as const;
+const VIEWS = ["all", "saved", "due", "lists"] as const;
 type View = (typeof VIEWS)[number];
 
-function href(params: { q: string; view: View; page: number }) {
+function href(params: { q: string; view: View; page: number; list?: string | null }) {
   const sp = new URLSearchParams();
   if (params.q) sp.set("q", params.q);
   if (params.view !== "all") sp.set("view", params.view);
+  if (params.list) sp.set("list", params.list);
   if (params.page > 1) sp.set("page", String(params.page));
   const qs = sp.toString();
   return `/dashboard/vocab${qs ? `?${qs}` : ""}`;
@@ -23,7 +25,7 @@ function href(params: { q: string; view: View; page: number }) {
 export default async function VocabPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; view?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; view?: string; page?: string; list?: string }>;
 }) {
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -77,17 +79,66 @@ export default async function VocabPage({
     .from("vocab_words")
     .select("id", { count: "exact", head: true });
 
+  // --- custom lists ("folders") --------------------------------------------
+  // RLS scopes every read to this user; the `list` param is only a selector.
+  const { data: listRows } = await supabase
+    .from("vocab_lists")
+    .select("id, name")
+    .eq("user_id", userId)
+    .order("name");
+  const lists = (listRows ?? []) as { id: string; name: string }[];
+  const studyingList =
+    view === "lists" && sp.list ? lists.find((l) => l.id === sp.list) ?? null : null;
+
+  // All membership rows in one paginated pass — they feed three things: the
+  // per-list counts in the manager, the studied list's word ids, and the
+  // ＋ List popover state for the words on this page.
+  const items: { list_id: string; word_id: string }[] = [];
+  if (lists.length) {
+    for (let from = 0; ; from += PAGE) {
+      const { data } = await supabase
+        .from("vocab_list_items")
+        .select("list_id, word_id")
+        .range(from, from + PAGE - 1);
+      const batch = (data ?? []) as { list_id: string; word_id: string }[];
+      items.push(...batch);
+      if (batch.length < PAGE) break;
+    }
+  }
+  const listCounts = new Map<string, number>();
+  for (const item of items) listCounts.set(item.list_id, (listCounts.get(item.list_id) ?? 0) + 1);
+  const listSummaries: VocabListSummary[] = lists.map((list) => ({
+    ...list,
+    count: listCounts.get(list.id) ?? 0,
+  }));
+  const listWordIds = studyingList
+    ? items.filter((item) => item.list_id === studyingList.id).map((item) => item.word_id)
+    : [];
+
   // --- the word list -------------------------------------------------------
   // Paginated so all 1,915 words stay reachable (PostgREST caps a page at 1000).
-  const filterIds = view === "saved" ? savedIds : view === "due" ? dueIds : null;
+  const filterIds =
+    view === "saved"
+      ? savedIds
+      : view === "due"
+        ? dueIds
+        : view === "lists"
+          ? studyingList
+            ? listWordIds
+            : []
+          : null;
+
+  // The lists view without a selected list renders the manager, not a deck —
+  // only run the words query when a deck is actually shown.
+  const showDeck = view !== "lists" || studyingList !== null;
 
   let words: VocabWord[] = [];
   let count = 0;
 
-  if (!filterIds || filterIds.length > 0) {
+  if (showDeck && (!filterIds || filterIds.length > 0)) {
     let query = supabase
       .from("vocab_words")
-      .select("id, word, definition, example_sentence, tags", { count: "exact" })
+      .select("id, word, definition, example_sentence, context_sentence, tags", { count: "exact" })
       .order("word");
     if (q) query = query.ilike("word", `%${q}%`);
     if (filterIds) query = query.in("id", filterIds);
@@ -99,6 +150,23 @@ export default async function VocabPage({
     count = total ?? 0;
   }
 
+  // The review deck has to arrive in the order the schedule asked for: the most
+  // overdue word first. The query sorts alphabetically, which is meaningless for
+  // a review session — that ordering is why spaced repetition was not working.
+  if (view === "due" && !q && words.length > 1) {
+    words = [...words].sort((a, b) =>
+      (progressMap.get(a.id)?.next_review_at ?? "").localeCompare(progressMap.get(b.id)?.next_review_at ?? "")
+    );
+  }
+
+  // Membership per word on this page, for the card's ＋ List popover.
+  const pageWordIds = new Set(words.map((w) => w.id));
+  const memberships: Record<string, string[]> = {};
+  for (const item of items) {
+    if (!pageWordIds.has(item.word_id)) continue;
+    (memberships[item.word_id] ??= []).push(item.list_id);
+  }
+
   const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
   const safePage = Math.min(page, pages);
 
@@ -106,6 +174,7 @@ export default async function VocabPage({
     { key: "all", label: "All words", n: totalWords ?? null },
     { key: "saved", label: "★ Saved", n: savedIds.length },
     { key: "due", label: "↻ Review due", n: dueIds.length },
+    { key: "lists", label: "📁 My lists", n: lists.length },
   ];
 
   const stats = [
@@ -114,6 +183,8 @@ export default async function VocabPage({
     { label: "Learning", value: learned.toLocaleString() },
     { label: "Due now", value: dueIds.length.toLocaleString() },
   ];
+
+  const managingLists = view === "lists" && !studyingList;
 
   return (
     <div className="dash-page">
@@ -127,30 +198,8 @@ export default async function VocabPage({
         </div>
       </div>
 
-      <div className="vocab-stats">
-        {stats.map((s) => (
-          <div className="vocab-stat" key={s.label}>
-            <span className="vocab-stat-value">{s.value}</span>
-            <span className="vocab-stat-label">{s.label}</span>
-          </div>
-        ))}
-      </div>
-
-      <form className="vocab-search" method="get" action="/dashboard/vocab">
-        {view !== "all" && <input type="hidden" name="view" value={view} />}
-        <input className="field-input" name="q" placeholder="Search a word…" defaultValue={q} />
-        <button className="btn btn-primary" type="submit">
-          Search
-        </button>
-        {q && (
-          <Link className="btn btn-ghost" href={href({ q: "", view, page: 1 })}>
-            Clear
-          </Link>
-        )}
-      </form>
-
-      <VocabContribution />
-
+      {/* Deck first — search and the activity heatmap live below the card so
+          the flashcard is on screen without scrolling. */}
       <div className="vocab-tabs">
         {tabs.map((t) => (
           <Link
@@ -164,61 +213,132 @@ export default async function VocabPage({
         ))}
       </div>
 
-      {words.length === 0 ? (
-        <div className="dash-empty">
-          {view === "saved" ? (
-            <p>
-              No saved words yet. Tap <strong>☆ Save</strong> on a card and it shows up here.
-            </p>
-          ) : view === "due" ? (
-            <p>Nothing due right now. Study a few cards and we&apos;ll schedule them with spaced repetition.</p>
-          ) : (
-            <p>No words found.</p>
-          )}
-        </div>
+      {managingLists ? (
+        <VocabLists lists={listSummaries} />
       ) : (
         <>
-          <VocabCards
-            words={words}
-            savedIds={savedIds}
-            progress={Object.fromEntries(
-              words.map((w) => [
-                w.id,
-                {
-                  mastery: progressMap.get(w.id)?.mastery ?? 0,
-                  times_seen: progressMap.get(w.id)?.times_seen ?? 0,
-                },
-              ])
-            )}
-          />
-
-          {pages > 1 && (
-            <nav className="vocab-pager" aria-label="Vocabulary pages">
-              {safePage > 1 ? (
-                <Link className="btn btn-ghost" href={href({ q, view, page: safePage - 1 })}>
-                  ← Prev
-                </Link>
-              ) : (
-                <span className="btn btn-ghost disabled" aria-disabled="true">
-                  ← Prev
+          {studyingList && (
+            <div className="vocab-list-head">
+              <Link className="btn btn-ghost" href={href({ q: "", view: "lists", page: 1 })}>
+                ← All lists
+              </Link>
+              <span className="vocab-list-head-title">
+                📁 {studyingList.name}
+                <span className="vocab-list-head-n">
+                  {listWordIds.length} {listWordIds.length === 1 ? "word" : "words"}
                 </span>
-              )}
-              <span className="vocab-pager-info">
-                Page {safePage} of {pages}
               </span>
-              {safePage < pages ? (
-                <Link className="btn btn-ghost" href={href({ q, view, page: safePage + 1 })}>
-                  Next →
-                </Link>
+            </div>
+          )}
+
+          {words.length === 0 ? (
+            <div className="dash-empty">
+              {view === "saved" ? (
+                <p>
+                  No saved words yet. Tap <strong>☆ Save</strong> on a card and it shows up here.
+                </p>
+              ) : view === "due" ? (
+                <p>Nothing due right now. Study a few cards and we&apos;ll schedule them with spaced repetition.</p>
+              ) : studyingList ? (
+                q ? (
+                  <p>
+                    No words in this list match “{q}”.{" "}
+                    <Link href={href({ q: "", view, page: 1, list: studyingList.id })}>Clear search</Link>
+                  </p>
+                ) : (
+                  <p>
+                    This list is empty. Browse{" "}
+                    <Link href={href({ q: "", view: "all", page: 1 })}>All words</Link> and tap{" "}
+                    <strong>＋ List</strong> on a card to add words.
+                  </p>
+                )
               ) : (
-                <span className="btn btn-ghost disabled" aria-disabled="true">
-                  Next →
-                </span>
+                <p>No words found.</p>
               )}
-            </nav>
+            </div>
+          ) : (
+            <>
+              <VocabCards
+                words={words}
+                savedIds={savedIds}
+                progress={Object.fromEntries(
+                  words.map((w) => [
+                    w.id,
+                    {
+                      mastery: progressMap.get(w.id)?.mastery ?? 0,
+                      times_seen: progressMap.get(w.id)?.times_seen ?? 0,
+                    },
+                  ])
+                )}
+                lists={lists}
+                memberships={memberships}
+              />
+
+              {pages > 1 && (
+                <nav className="vocab-pager" aria-label="Vocabulary pages">
+                  {safePage > 1 ? (
+                    <Link
+                      className="btn btn-ghost"
+                      href={href({ q, view, page: safePage - 1, list: studyingList?.id })}
+                    >
+                      ← Prev
+                    </Link>
+                  ) : (
+                    <span className="btn btn-ghost disabled" aria-disabled="true">
+                      ← Prev
+                    </span>
+                  )}
+                  <span className="vocab-pager-info">
+                    Page {safePage} of {pages}
+                  </span>
+                  {safePage < pages ? (
+                    <Link
+                      className="btn btn-ghost"
+                      href={href({ q, view, page: safePage + 1, list: studyingList?.id })}
+                    >
+                      Next →
+                    </Link>
+                  ) : (
+                    <span className="btn btn-ghost disabled" aria-disabled="true">
+                      Next →
+                    </span>
+                  )}
+                </nav>
+              )}
+            </>
           )}
         </>
       )}
+
+      {/* Kept below the deck: the flashcard — the point of this page — stays
+          above the fold, with the counters as a footer summary. */}
+      <div className="vocab-stats">
+        {stats.map((s) => (
+          <div className="vocab-stat" key={s.label}>
+            <span className="vocab-stat-value">{s.value}</span>
+            <span className="vocab-stat-label">{s.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Search filters the decks, so it stays out of the list-manager view. */}
+      {!managingLists && (
+        <form className="vocab-search" method="get" action="/dashboard/vocab">
+          {view !== "all" && <input type="hidden" name="view" value={view} />}
+          {studyingList && <input type="hidden" name="list" value={studyingList.id} />}
+          <input className="field-input" name="q" placeholder="Search a word…" defaultValue={q} />
+          <button className="btn btn-primary" type="submit">
+            Search
+          </button>
+          {q && (
+            <Link className="btn btn-ghost" href={href({ q: "", view, page: 1, list: studyingList?.id })}>
+              Clear
+            </Link>
+          )}
+        </form>
+      )}
+
+      <VocabContribution />
     </div>
   );
 }

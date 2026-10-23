@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { CountUp, Reveal } from "@/components/Reveal";
@@ -7,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 type LeaderRow = {
   user_id: string;
+  username: string | null;
   display_name: string;
   xp: number;
   questions: number;
@@ -41,18 +43,30 @@ export default async function LeaderboardPage() {
     .eq("user_id", user.id)
     .gt("times_seen", 0);
 
+  // My questions: each counts ONCE, with the status of its latest attempt —
+  // the same rule as the right rail, the analytics page and the question bank.
+  // (XP and badges above stay per attempt, so a retry still earns.)
   const stamps: string[] = [];
+  const questionState = new Map<string, boolean>();
   const PAGE = 1000;
   for (let from = 0; ; from += PAGE) {
     const { data } = await supabase
       .from("practice_attempts")
-      .select("created_at")
+      .select("question_id, is_correct, created_at")
       .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
       .range(from, from + PAGE - 1);
-    const rows = (data ?? []) as { created_at: string }[];
-    stamps.push(...rows.map((r) => r.created_at));
+    const rows = (data ?? []) as { question_id: string | null; is_correct: boolean | null; created_at: string }[];
+    for (const r of rows) {
+      if (r.question_id && !questionState.has(r.question_id)) {
+        questionState.set(r.question_id, r.is_correct === true);
+      }
+      stamps.push(r.created_at);
+    }
     if (rows.length < PAGE) break;
   }
+  const practiced = questionState.size;
+  const solved = [...questionState.values()].filter(Boolean).length;
 
   const { streak, bestStreak, activeDays } = streakFrom(stamps);
   const stats: ProgressStats = {
@@ -68,7 +82,7 @@ export default async function LeaderboardPage() {
   const xp = xpFor(stats);
   const level = levelFor(xp);
   const badges = badgesFor(stats);
-  const accuracy = stats.attempts ? Math.round((stats.correct / stats.attempts) * 100) : 0;
+  const accuracy = practiced ? Math.round((solved / practiced) * 100) : 0;
   const pct = Math.round((level.into / level.span) * 100);
 
   // --- ranking (SECURITY DEFINER RPC; see the migration) -------------------
@@ -83,8 +97,8 @@ export default async function LeaderboardPage() {
     <div className="dash-page">
       <div className="dash-head">
         <div>
-          <h1 className="dash-title">Progress</h1>
-          <p className="dash-sub">XP, levels and badges — earned from real work, never bought.</p>
+          <h1 className="dash-title">Leaderboard</h1>
+          <p className="dash-sub">Your progress, levels and weekly leaderboard — earned from real work, never bought.</p>
         </div>
       </div>
 
@@ -159,7 +173,7 @@ export default async function LeaderboardPage() {
           <div className="dash-stat-card">
             <span className="dash-stat-label">Questions answered</span>
             <span className="dash-stat-value">
-              <CountUp to={stats.attempts} />
+              <CountUp to={practiced} />
             </span>
           </div>
         </Reveal>
@@ -238,7 +252,13 @@ export default async function LeaderboardPage() {
                       <tr key={r.user_id} className={r.is_me ? "me" : ""}>
                         <td className="board-rank">{MEDALS[i] ?? i + 1}</td>
                         <td>
-                          {r.display_name}
+                          {r.username ? (
+                            <Link className="board-name" href={`/dashboard/u/${r.username}`}>
+                              {r.display_name}
+                            </Link>
+                          ) : (
+                            r.display_name
+                          )}
                           {r.is_me ? " (you)" : ""}
                         </td>
                         <td>{Number(r.xp).toLocaleString()}</td>

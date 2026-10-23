@@ -17,7 +17,7 @@ export default async function OnboardingPage() {
     .maybeSingle();
 
   return (
-    <main id="main" className="auth-shell">
+    <main id="main" className="onb-shell">
       <OnboardingForm
         initial={{
           fullName: profile?.full_name ?? null,

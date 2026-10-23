@@ -17,9 +17,14 @@ export async function createClient() {
         },
         setAll(cookiesToSet) {
           try {
-            cookiesToSet.forEach(({ name, value, options }) =>
-              cookieStore.set(name, value, options)
-            );
+            // Drop empty-value writes for the same reason as the proxy: they
+            // are racing-refresh losses, not real sign-outs (those happen
+            // client-side), so they must never wipe a live session.
+            cookiesToSet
+              .filter(({ value }) => Boolean(value))
+              .forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              );
           } catch {
             // Called from a Server Component — safe to ignore when middleware refreshes sessions.
           }

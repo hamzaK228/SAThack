@@ -1,4 +1,4 @@
-import { buildPlan, DOMAIN_ORDER, type DomainStat, type FocusDomain, type PlanTask } from "../plan";
+import { buildPlan, DOMAIN_ORDER, sectionOf, type DomainStat, type FocusDomain, type PlanTask } from "../plan";
 import { daysUntil } from "../exam-date";
 import { knowledgeForTopic } from "./knowledge";
 import { chatCompletion } from "./llm";
@@ -22,6 +22,8 @@ export type PlanContext = {
   targetScore: number;
   currentScore: number | null;
   testDate: string | null;
+  /** Minutes the student says they have on a normal day; null = let the planner decide. */
+  minutesPerDay: number | null;
   domainStats: DomainStat[];
   skillStats: SkillStat[];
   mistakes: Mistake[];
@@ -107,16 +109,49 @@ function analyzeContext(ctx: PlanContext) {
 
   const daysLeft = ctx.testDate ? Math.max(0, daysUntil(ctx.testDate) ?? 0) : null;
 
-  return { domainLines, skillLines, mistakeLines, daysLeft };
+  // Pacing math the planner standard is written against. Weeks mirrors
+  // buildPlan's fallback (8) when no test date is set.
+  const weeks = daysLeft !== null ? Math.max(1, Math.ceil(daysLeft / 7)) : 8;
+  const gap = ctx.currentScore !== null ? ctx.targetScore - ctx.currentScore : null;
+  const pointsPerWeek = gap !== null && gap > 0 ? Math.round(gap / weeks) : 0;
+
+  // Both sections count equally toward the 400–1600 total, so the planner
+  // needs the section-level picture, not just per-domain rows.
+  const sectionTotals = { math: { correct: 0, total: 0 }, rw: { correct: 0, total: 0 } };
+  for (const d of ctx.domainStats) {
+    const bucket = sectionOf(d.domain) === "math" ? sectionTotals.math : sectionTotals.rw;
+    bucket.correct += d.correct;
+    bucket.total += d.total;
+  }
+  const acc = (s: { correct: number; total: number }) => (s.total ? Math.round((s.correct / s.total) * 100) : null);
+
+  return {
+    domainLines,
+    skillLines,
+    mistakeLines,
+    daysLeft,
+    weeks,
+    gap,
+    pointsPerWeek,
+    totalAttempts: ctx.domainStats.reduce((sum, d) => sum + d.total, 0),
+    mathAcc: acc(sectionTotals.math),
+    rwAcc: acc(sectionTotals.rw),
+  };
 }
 
 function buildPrompt(ctx: PlanContext, analysis: ReturnType<typeof analyzeContext>, bookSnippets: string[]) {
-  return `You are an expert Digital SAT tutor. Generate a personalized study plan in strict JSON.
+  return `You are the lead Digital SAT planner at SAThack — a professional tutor who builds week-by-week prep timelines for a living. You have deep, current command of the digital, adaptive SAT: Reading & Writing (54 questions, 64 minutes) and Math (44 questions, 70 minutes), each scored 200–800 for a 400–1600 total; section-adaptive modules with no guessing penalty; official Bluebook practice tests. Generate a personalized study plan in strict JSON.
 
 STUDENT:
 - Current score: ${ctx.currentScore ?? "unknown (needs diagnostic)"}
 - Target score: ${ctx.targetScore}
-- Test date: ${ctx.testDate ?? "not set"} (${analysis.daysLeft ?? "?"} days left)
+- Test date: ${ctx.testDate ?? "not set"} (${analysis.daysLeft ?? "?"} days left — about ${analysis.weeks} week${analysis.weeks === 1 ? "" : "s"} of prep)
+- Pace required to close the gap: ${analysis.gap !== null ? `about ${analysis.pointsPerWeek} points/week` : "establish a baseline first"}. Score gains come fastest early and taper near 1500; if this pace looks unrealistic, say so calmly and prioritize the highest-leverage moves instead of promising the gap will close.
+
+SECTION SNAPSHOT (each section is 50% of the total):
+- Math: ${analysis.mathAcc === null ? "no data" : analysis.mathAcc + "% accuracy"}
+- Reading & Writing: ${analysis.rwAcc === null ? "no data" : analysis.rwAcc + "% accuracy"}
+- Attempts recorded: ${analysis.totalAttempts}
 
 PERFORMANCE BY DOMAIN (accuracy):
 ${analysis.domainLines.join("\n")}
@@ -127,15 +162,16 @@ ${analysis.skillLines.join("\n") || "(none yet)"}
 RECENT MISTAKES:
 ${analysis.mistakeLines.join("\n")}
 
-RELEVANT KNOWLEDGE FROM SAT BOOKS:
-${bookSnippets.slice(0, 4).join("\n---\n") || "(none)"}
+KNOWLEDGE FROM THE PLATFORM'S SAT BOOKS AND TUTOR HANDBOOK:
+${bookSnippets.slice(0, 5).join("\n---\n") || "(none)"}
 
 PLANNING STANDARD:
-- Diagnose before prescribing. Base every claim on the supplied results.
-- Prioritize the lowest-accuracy skills, but keep both Math and Reading & Writing active each week.
-- Use a learn → targeted practice → timed practice → error-log review loop.
-- Recommend official Bluebook full-length tests for realistic adaptive-test rehearsal.
-- Do not promise a score increase. Make advice specific, calm, and feasible before the test date.
+- Diagnose before prescribing. Base every claim on the supplied results; invent no statistics.
+- Set expectations honestly against the days left. Never promise or predict a score.
+- Weight weekly effort toward the weaker section, but keep both sections active every week — each is half the total.
+- Think in phases and say which phase applies when: foundation (close content gaps, untimed accuracy work) → skill-building (mixed timed sets + error-log review) → test-readiness (a full-length official Bluebook test every 1–2 weeks, review-led) → taper (a light final week — confidence and logistics, no cramming).
+- Make the error log the core habit: every miss re-categorized (content gap, process slip, misread, time pressure) and re-done a few days later.
+- Ground tips in the book excerpts where possible; make every item concrete — what to do, how, and for how long.
 
 Return ONLY a JSON object with these exact keys:
 {
@@ -174,7 +210,7 @@ function localPlan(ctx: PlanContext, analysis: ReturnType<typeof analyzeContext>
 
   const summary =
     ctx.currentScore !== null
-      ? `You're ${Math.max(0, gap!)} points from ${ctx.targetScore}. Over ${analysis.daysLeft ? Math.max(1, Math.ceil(analysis.daysLeft / 7)) : 8} weeks, prioritize ${topWeakDomains.join(", ")} — especially ${weak[0] ?? "your weakest skill"}.`
+      ? `You're ${Math.max(0, gap!)} points from ${ctx.targetScore}. Over ${analysis.daysLeft ? Math.max(1, Math.ceil(analysis.daysLeft / 7)) : 8} week${(analysis.daysLeft ? Math.max(1, Math.ceil(analysis.daysLeft / 7)) : 8) === 1 ? "" : "s"}, prioritize ${topWeakDomains.join(", ")} — especially ${weak[0] ?? "your weakest skill"}.`
       : `Start with a diagnostic to establish a baseline, then focus on ${topWeakDomains.join(", ")}.`;
 
   const insights: string[] = [];
@@ -195,7 +231,9 @@ function localPlan(ctx: PlanContext, analysis: ReturnType<typeof analyzeContext>
     targetScore: ctx.targetScore,
     currentScore: ctx.currentScore,
     testDate: ctx.testDate,
+    minutesPerDay: ctx.minutesPerDay,
     stats: statsMap,
+    skills: ctx.skillStats,
   });
 
   return {
@@ -238,7 +276,9 @@ export async function generatePlan(
     targetScore: ctx.targetScore,
     currentScore: ctx.currentScore,
     testDate: ctx.testDate,
+    minutesPerDay: ctx.minutesPerDay,
     stats: statsMap,
+    skills: ctx.skillStats,
   });
   const gap = ctx.currentScore !== null ? ctx.targetScore - ctx.currentScore : null;
 
@@ -265,7 +305,7 @@ export async function generatePlan(
     .slice(0, 3)
     .map((x) => x.d);
 
-  const book = knowledgeForTopic(weakDomains, ctx.skillStats.slice(0, 5).map((s) => s.skill));
+  const book = knowledgeForTopic(weakDomains, ctx.skillStats.slice(0, 5).map((s) => s.skill), 6);
   const bookSnippets = book.map((c) => c.text);
 
   const raw = await chatCompletion(buildPrompt(ctx, analysis, bookSnippets), { json: true, model });

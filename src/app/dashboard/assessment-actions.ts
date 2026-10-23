@@ -7,7 +7,7 @@ export async function assessmentAction(action: "start" | "resume" | "save" | "ad
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("assessment", { p_action: action, p_id: id, p_payload: payload });
   if (error) {
-    console.error("[assessment]", { action, code: error.code });
+    console.error("[assessment]", { action, code: error.code, message: error.message });
     throw new Error("Could not save your test. Check your connection and try again.");
   }
   return data as Assessment | null;

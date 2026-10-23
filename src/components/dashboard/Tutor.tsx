@@ -41,8 +41,13 @@ export default function Tutor({
   async function run(prompt: string) {
     setBusy(true);
     try {
+    // Everything except the greeting is a real conversation turn.
+    const history = messages
+      .slice(1)
+      .map((m) => ({ role: m.role === "ai" ? ("assistant" as const) : ("user" as const), content: m.text }));
     const answer = await askAI({
       question: prompt,
+      history,
       questionText: question,
       domain,
       skill,
@@ -62,6 +67,7 @@ export default function Tutor({
   }
 
   function reveal() {
+    if (!correctAnswer) return;
     add("ai", `🎯 The correct answer is ${correctAnswer}.`);
   }
 
@@ -99,9 +105,11 @@ export default function Tutor({
         <button className="tutor-chip" onClick={explain}>
           📖 Explain step-by-step
         </button>
-        <button className="tutor-chip" onClick={reveal}>
-          🎯 Show answer
-        </button>
+        {correctAnswer && (
+          <button className="tutor-chip" onClick={reveal}>
+            🎯 Show answer
+          </button>
+        )}
       </div>
 
       <div className="tutor-input-row">

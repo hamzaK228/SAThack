@@ -4,6 +4,7 @@ import CommunityHub, {
   type CommunityPost,
   type CommunityReaction,
 } from "@/components/dashboard/CommunityHub";
+import FriendsPanel, { type FriendRow } from "@/components/dashboard/FriendsPanel";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 
@@ -18,11 +19,18 @@ export default async function CommunityPage({
   if (!user) return null;
   const supabase = await createClient();
   const groupSlug = (await searchParams).group;
-  const [{ data: groups, error: groupsError }, { data: memberships }, { data: requests }, { data: profile }] = await Promise.all([
+  const [
+    { data: groups, error: groupsError },
+    { data: memberships },
+    { data: requests },
+    { data: profile },
+    { data: friends },
+  ] = await Promise.all([
     supabase.from("community_groups").select("id,slug,name,description,owner_id,owner_name,member_count,created_at").order("member_count", { ascending: false }).order("created_at", { ascending: false }),
     supabase.from("community_group_members").select("group_id,role").eq("user_id", user.id),
     supabase.from("community_group_requests").select("group_id,user_id,requester_name,status,requested_at").order("requested_at", { ascending: false }),
     supabase.from("profiles").select("username").eq("id", user.id).maybeSingle(),
+    supabase.rpc("friends_overview"),
   ]);
   if (groupsError) throw new Error("Could not load the community.");
   const typedGroups = (groups ?? []) as CommunityGroup[];
@@ -46,6 +54,7 @@ export default async function CommunityPage({
 
   return (
     <div className="dash-page community-page">
+      <FriendsPanel friends={(friends ?? []) as FriendRow[]} />
       <CommunityHub
         userId={user.id}
         userName={profile?.username?.trim() || "student"}

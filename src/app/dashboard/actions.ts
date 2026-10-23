@@ -4,20 +4,30 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
-import { knowledgeForTopic } from "@/lib/ai/knowledge";
-import { chatCompletion } from "@/lib/ai/llm";
+import { blendKnowledge, formatKnowledge } from "@/lib/ai/knowledge";
+import { chat, chatCompletion } from "@/lib/ai/llm";
 import { availableModels } from "@/lib/ai/models";
+import { buildTutorSystem } from "@/lib/ai/tutor";
+import { getTutorContext } from "@/lib/tutor-context";
+import { daysUntil } from "@/lib/exam-date";
 import { applyReview } from "@/lib/vocab";
 import { regenerateStudyPlan } from "@/lib/study-plan-data";
 import { QUESTION_COLUMNS, QUESTION_BATCH_SIZE, type SessionQuestion } from "@/lib/session-questions";
 
-export async function loadSessionQuestions(ids: string[]) {
+export async function loadSessionQuestions(
+  ids: string[],
+  opts?: { officialOnly?: boolean }
+) {
   if (!ids.length || ids.length > QUESTION_BATCH_SIZE) throw new Error("Invalid question batch.");
   const user = await getCurrentUser();
   if (!user) redirect("/auth");
   const supabase = await createClient();
+  // Review sessions may contain practice-test questions (is_official=false);
+  // drills stay inside the official bank.
+  let questionQuery = supabase.from("questions").select(QUESTION_COLUMNS).in("id", ids);
+  if (opts?.officialOnly !== false) questionQuery = questionQuery.eq("is_official", true).eq("usable", true);
   const [questions, saved] = await Promise.all([
-    supabase.from("questions").select(QUESTION_COLUMNS).eq("is_official", true).eq("usable",true).in("id", ids),
+    questionQuery,
     supabase.from("saved_questions").select("question_id").eq("user_id", user.id).in("question_id", ids),
   ]);
   if (questions.error || saved.error) throw new Error("Could not load questions.");
@@ -27,23 +37,94 @@ export async function loadSessionQuestions(ids: string[]) {
   return { questions: ordered as SessionQuestion[], savedIds: (saved.data ?? []).map((row) => row.question_id) };
 }
 
-export async function recordAttempt(input: {
+/**
+ * Grade one drill answer without exposing the answer key to the browser.
+ *
+ * When `record` is set (first attempt on a question) the insert lands in
+ * `practice_attempts`, where the `grade_attempt` trigger grades it against the
+ * stored answer server-side. Retries of a missed question are graded by a
+ * read-only compare; a retry that lands the correct answer is recorded once,
+ * because that correction is the mastery signal the review queue listens for.
+ * The dashboard's "Questions" stat counts distinct questions, so this extra
+ * row never double-counts a question the student practiced once.
+ */
+export async function checkAttempt(input: {
   question_id: string;
   selected_answer: string | null;
-}) {
+  record: boolean;
+  /** Mastery retries must create a fresh row even when the answer repeats. */
+  force?: boolean;
+}): Promise<{ ok: boolean; correct?: boolean; explanation?: string | null; recorded?: boolean }> {
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) redirect("/auth");
+  const answer = (input.selected_answer ?? "").trim();
+  if (!answer || answer.length > 200) return { ok: false };
 
-  const { error } = await supabase.from("practice_attempts").insert({
-    user_id: user.id,
-    question_id: input.question_id,
-    selected_answer: input.selected_answer,
-    mode: "drill",
+  if (input.record) {
+    // A slow-but-successful save can show the client an error, and its retry
+    // would insert a second row for the same answer. Coalesce attempts made
+    // within the last minute: treat the most recent one as THE attempt.
+    if (!input.force) {
+      const { data: recent } = await supabase
+        .from("practice_attempts")
+        .select("id, is_correct, selected_answer")
+        .eq("user_id", user.id)
+        .eq("question_id", input.question_id)
+        .eq("mode", "drill")
+        .gte("created_at", new Date(Date.now() - 60_000).toISOString())
+        .order("created_at", { ascending: false })
+        .limit(1);
+      // Coalesce only the same answer submitted twice (a slow save plus its
+      // retry). A different answer — e.g. the second try in a mastery set — must
+      // be inserted and graded on its own.
+      if (recent && recent.length > 0 && recent[0].selected_answer === answer) {
+        const correct = recent[0].is_correct === true;
+        return { ok: true, correct, explanation: correct ? await fetchExplanation(supabase, input.question_id) : null, recorded: true };
+      }
+    }
+    // The write is server-mediated: record_attempt() re-checks the question,
+    // rate-limits, inserts and returns the trigger's verdict. The browser no
+    // longer has INSERT on practice_attempts.
+    const { data: recorded, error } = await supabase.rpc("record_attempt", {
+      p_question_id: input.question_id,
+      p_answer: answer,
+    });
+    const row = (Array.isArray(recorded) ? recorded[0] : recorded) as
+      | { id?: string; is_correct?: boolean }
+      | null;
+    if (error || !row) return { ok: false };
+    const correct = row.is_correct === true;
+    const explanation = correct ? await fetchExplanation(supabase, input.question_id) : null;
+    return { ok: true, correct, explanation, recorded: true };
+  }
+
+  // Retry path: the student already has a wrong attempt on this question.
+  // check_answer() returns only a boolean and refuses without that history;
+  // a correct retry is then recorded once so mastery/review sees it.
+  const { data: correctAnswer, error: checkError } = await supabase.rpc("check_answer", {
+    p_question_id: input.question_id,
+    p_answer: answer,
   });
+  if (checkError) return { ok: false };
+  if (correctAnswer !== true) return { ok: true, correct: false };
 
-  // Dynamic pages read fresh data on navigation; do not reload the active drill.
-  return { ok: !error };
+  const { error: recordError } = await supabase.rpc("record_attempt", {
+    p_question_id: input.question_id,
+    p_answer: answer,
+  });
+  const explanation = await fetchExplanation(supabase, input.question_id);
+  return { ok: true, correct: true, explanation, recorded: !recordError };
+}
+
+async function fetchExplanation(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  questionId: string
+): Promise<string | null> {
+  const { data, error } = await supabase.rpc("reveal_answer", { p_question_id: questionId });
+  if (error) return null;
+  const row = (Array.isArray(data) ? data[0] : data) as { explanation?: string | null } | null;
+  return row?.explanation ?? null;
 }
 
 /** Server-side guard rails for the goal editor — mirrors the DB check constraints. */
@@ -137,15 +218,40 @@ export async function toggleSave(question_id: string, saved: boolean) {
   if (!saved) {
     const { error } = await supabase.from("saved_questions").delete()
       .eq("user_id", user.id).eq("question_id", question_id);
+    if (!error) revalidatePath("/dashboard/saved");
     return { ok: !error };
   }
   const { error } = await supabase.from("saved_questions").upsert({ user_id: user.id, question_id },
     { onConflict: "user_id,question_id", ignoreDuplicates: true });
+  if (!error) revalidatePath("/dashboard/saved");
   return { ok: !error };
+}
+
+/** Tutor chat keeps a short memory: the last few turns, each tightly capped. */
+const HISTORY_TURNS = 8;
+const HISTORY_MESSAGE_CAP = 2000;
+
+type HistoryTurn = { role: "user" | "assistant"; content: string };
+
+/** Validate and trim client-supplied chat history before it reaches the model. */
+function sanitizeHistory(history: unknown): HistoryTurn[] {
+  if (!Array.isArray(history)) return [];
+  return history
+    .filter(
+      (m): m is HistoryTurn =>
+        !!m &&
+        typeof m === "object" &&
+        ((m as { role?: unknown }).role === "user" || (m as { role?: unknown }).role === "assistant") &&
+        typeof (m as { content?: unknown }).content === "string" &&
+        (m as { content: string }).content.trim().length > 0
+    )
+    .slice(-HISTORY_TURNS)
+    .map((m) => ({ role: m.role, content: m.content.slice(0, HISTORY_MESSAGE_CAP) }));
 }
 
 export async function askAI(input: {
   question: string;
+  history?: HistoryTurn[];
   questionText?: string | null;
   domain?: string | null;
   skill?: string | null;
@@ -156,6 +262,7 @@ export async function askAI(input: {
       [input.domain, input.skill].some(value => value != null && (typeof value !== "string" || value.length > 200))) {
     return "Please keep your question under 4,000 characters.";
   }
+  const history = sanitizeHistory(input.history);
   const supabase = await createClient();
   const {
     data: { user },
@@ -167,26 +274,53 @@ export async function askAI(input: {
   if (!permitted) return "Please wait a few seconds before asking again. The daily limit is 50 messages.";
   const { data: profile } = await supabase
     .from("profiles")
-    .select("ai_model")
+    .select("ai_model, target_score, current_score, test_date")
     .eq("id", user.id)
     .maybeSingle();
 
+  // Two retrieval signals: what the student literally asked, and what the
+  // current topic (domain/skill) is about — the tutor page sends only the
+  // question, the practice-question modal also sends the topic.
   const domains = input.domain ? [input.domain] : [];
   const skills = input.skill ? [input.skill] : [];
-  const chunks = knowledgeForTopic(domains, skills, 4);
-  const context = chunks.map((c) => `[${c.book} p.${c.page}] ${c.text}`).join("\n\n");
+  const chunks = blendKnowledge(input.question, domains, skills, 6);
+  const context = formatKnowledge(chunks);
 
-  const prompt = `You are an expert Digital SAT tutor. Answer the student's question using the book excerpts below when relevant. Be concise, clear, and encouraging.
+  const userContent = [
+    `QUESTION: ${input.question}`,
+    input.questionText ? `QUESTION TEXT: ${input.questionText}` : "",
+    input.explanation ? `OFFICIAL EXPLANATION (for reference): ${input.explanation}` : "",
+    input.domain ? `TOPIC: ${input.domain}${input.skill ? ` — ${input.skill}` : ""}` : "",
+    "",
+    "SAT BOOK EXCERPTS:",
+    context || "(none)",
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
 
-QUESTION: ${input.question}
-${input.questionText ? `QUESTION TEXT: ${input.questionText}` : ""}
-${input.explanation ? `OFFICIAL EXPLANATION (for reference): ${input.explanation}` : ""}
-${input.domain ? `TOPIC: ${input.domain}${input.skill ? ` — ${input.skill}` : ""}` : ""}
+  // The mentor answers better when it knows the student: their weakest measured
+  // skills, the steps they were actually assigned today, and their streak.
+  const tutorContext = await getTutorContext();
 
-SAT BOOK EXCERPTS:
-${context || "(none)"}`;
-
-  const answer = await chatCompletion(prompt, { temperature: 0.5, model: profile?.ai_model ?? null });
+  const answer = await chat(
+    [
+      {
+        role: "system",
+        content: buildTutorSystem({
+          currentScore: profile?.current_score ?? null,
+          targetScore: profile?.target_score ?? null,
+          testDate: profile?.test_date ?? null,
+          daysLeft: profile?.test_date ? daysUntil(profile.test_date) : null,
+          weakSkills: tutorContext?.weakSkills,
+          mission: tutorContext?.mission.map((step) => ({ title: step.title, minutes: step.minutes })),
+          streak: tutorContext?.streak,
+        }),
+      },
+      ...history,
+      { role: "user", content: userContent },
+    ],
+    { temperature: 0.5, model: profile?.ai_model ?? null }
+  );
   if (answer.trim()) return answer.trim();
 
   if (context) return `From your SAT books:\n\n${context.slice(0, 1400)}`;
@@ -342,6 +476,121 @@ export async function reviewVocab(word_id: string, known: boolean): Promise<{ ok
 }
 
 
+/* ---------------------------------------------------------------------------
+ * Custom vocab lists — "folders" of words a student groups themselves.
+ * Lists are private (RLS: owner only); a word can sit in several lists and
+ * keeps one shared spaced-repetition schedule either way.
+ * ------------------------------------------------------------------------- */
+
+const VOCAB_LIST_LIMIT = 50;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Trim, collapse whitespace, drop control characters, cap at the DB's 60. */
+function normalizeListName(value: string): string {
+  return value
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, 60);
+}
+
+export async function createVocabList(nameValue: string): Promise<{
+  ok: boolean;
+  error?: string;
+  list?: { id: string; name: string };
+}> {
+  const name = normalizeListName(nameValue);
+  if (!name) return { ok: false, error: "Give your list a name (1–60 characters)." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  // Soft cap — keeps the add-to-list picker and the lists page readable.
+  const { count } = await supabase
+    .from("vocab_lists")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id);
+  if ((count ?? 0) >= VOCAB_LIST_LIMIT) {
+    return { ok: false, error: `You've reached the ${VOCAB_LIST_LIMIT}-list limit. Delete one to make room.` };
+  }
+
+  const { data, error } = await supabase
+    .from("vocab_lists")
+    .insert({ user_id: user.id, name })
+    .select("id, name")
+    .single();
+  if (error?.code === "23505") return { ok: false, error: `You already have a list called “${name}”.` };
+  if (error || !data) return { ok: false, error: "Could not create the list — the database migration may not be applied yet." };
+
+  revalidatePath("/dashboard/vocab");
+  return { ok: true, list: { id: data.id as string, name: data.name as string } };
+}
+
+export async function renameVocabList(list_id: string, nameValue: string): Promise<{ ok: boolean; error?: string; name?: string }> {
+  if (!UUID_RE.test(list_id)) return { ok: false, error: "That list no longer exists." };
+  const name = normalizeListName(nameValue);
+  if (!name) return { ok: false, error: "Give your list a name (1–60 characters)." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { data, error } = await supabase
+    .from("vocab_lists")
+    .update({ name })
+    .eq("id", list_id)
+    .select("id, name")
+    .maybeSingle();
+  if (error?.code === "23505") return { ok: false, error: `You already have a list called “${name}”.` };
+  if (error || !data) return { ok: false, error: "Could not rename the list." };
+
+  revalidatePath("/dashboard/vocab");
+  return { ok: true, name: data.name as string };
+}
+
+export async function deleteVocabList(list_id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!UUID_RE.test(list_id)) return { ok: false, error: "That list no longer exists." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  // Items cascade with the list; RLS means only this user's list can match.
+  const { error } = await supabase.from("vocab_lists").delete().eq("id", list_id);
+  if (error) return { ok: false, error: "Could not delete the list." };
+
+  revalidatePath("/dashboard/vocab");
+  return { ok: true };
+}
+
+/**
+ * Put a word in / take it out of one list. Deliberately does NOT revalidate:
+ * the card updates optimistically and tab counts are refetched on navigation,
+ * so re-rendering the whole page per checkbox tick is pure latency.
+ */
+export async function toggleWordInList(word_id: string, list_id: string): Promise<{ ok: boolean; inList?: boolean; error?: string }> {
+  if (!UUID_RE.test(word_id) || !UUID_RE.test(list_id)) return { ok: false, error: "That word or list no longer exists." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { data: existing } = await supabase
+    .from("vocab_list_items")
+    .select("word_id")
+    .eq("list_id", list_id)
+    .eq("word_id", word_id)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase.from("vocab_list_items").delete().eq("list_id", list_id).eq("word_id", word_id);
+    if (error) return { ok: false, error: "Could not update the list." };
+    return { ok: true, inList: false };
+  }
+
+  const { error } = await supabase.from("vocab_list_items").insert({ list_id, word_id });
+  if (error) return { ok: false, error: "Could not update the list." };
+  return { ok: true, inList: true };
+}
+
+
 /**
  * Tick a study-plan task off (or back on). Keyed by the task's stable key, so
  * progress survives the plan being regenerated.
@@ -389,13 +638,22 @@ export async function setPlanTaskDone(input: {
  * The plan itself is still produced by one engine (src/lib/study-plan-data.ts) —
  * this only forces it to ignore the plan it already had.
  */
-export async function regeneratePlan() {
+export async function regeneratePlan(): Promise<{ ok: boolean; error?: string }> {
   const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
+  // Re-planning is an AI call like any other — it consumes the same quota
+  // (50/day) instead of bypassing it.
+  const supabase = await createClient();
+  const { data: permitted, error: quotaError } = await supabase.rpc("consume_ai_quota");
+  if (quotaError || !permitted) {
+    return { ok: false, error: "The daily AI limit is 50 requests. Please wait a bit and try again." };
+  }
+
   const bundle = await regenerateStudyPlan();
-  if (!bundle) return;
+  if (!bundle) return { ok: false, error: "Could not load your results. Please try again." };
 
   revalidatePath("/dashboard/plan");
   revalidatePath("/dashboard");
+  return { ok: true };
 }

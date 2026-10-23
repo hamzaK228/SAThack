@@ -1,6 +1,6 @@
 begin;
 
-create table public.practice_forms (
+create table if not exists public.practice_forms (
   id text primary key check (id ~ '^digital-[0-9]{2}$'),
   title text not null,
   sequence integer not null unique check (sequence between 1 and 10),
@@ -8,6 +8,17 @@ create table public.practice_forms (
   published boolean not null default true
 );
 alter table public.practice_forms enable row level security;
+alter table public.practice_forms drop constraint if exists practice_forms_modules_check;
+alter table public.practice_forms add constraint practice_forms_modules_check check (
+  jsonb_typeof(modules)='object'
+  and jsonb_array_length(modules->'rw1')=27
+  and jsonb_array_length(modules->'rw2Easy')=27
+  and jsonb_array_length(modules->'rw2Hard')=27
+  and jsonb_array_length(modules->'math1')=22
+  and jsonb_array_length(modules->'math2Easy')=22
+  and jsonb_array_length(modules->'math2Hard')=22
+);
+drop policy if exists practice_forms_read on public.practice_forms;
 create policy practice_forms_read on public.practice_forms for select to authenticated using (published);
 grant select on public.practice_forms to authenticated;
 revoke insert, update, delete on public.practice_forms from anon, authenticated;
@@ -32,6 +43,15 @@ begin
     from public.questions where is_official and usable and section::text='math' and difficulty::text='medium';
   select array_agg(id order by md5(id::text || ':math-hard-v1')) into math_hard
     from public.questions where is_official and usable and section::text='math' and difficulty::text='hard';
+
+  if coalesce(cardinality(rw_easy),0) < 230
+    or coalesce(cardinality(rw_medium),0) < 350
+    or coalesce(cardinality(rw_hard),0) < 230
+    or coalesce(cardinality(math_easy),0) < 190
+    or coalesce(cardinality(math_medium),0) < 280
+    or coalesce(cardinality(math_hard),0) < 190 then
+    raise exception 'Not enough verified official questions to build 10 complete practice forms';
+  end if;
 
   for f in 1..10 loop
     select jsonb_agg(id order by md5(id::text || f::text || ':rw1')) into rw1 from unnest(
@@ -60,16 +80,22 @@ begin
       f,
       jsonb_build_object('rw1',rw1,'rw2Easy',rw2_easy,'rw2Hard',rw2_hard,
                          'math1',math1,'math2Easy',math2_easy,'math2Hard',math2_hard)
-    );
+    )
+    on conflict (id) do update set
+      title=excluded.title,
+      sequence=excluded.sequence,
+      modules=excluded.modules,
+      published=true;
   end loop;
 end $$;
 
-alter table public.assessments drop constraint assessments_kind_check;
+alter table public.assessments drop constraint if exists assessments_kind_check;
 alter table public.assessments add constraint assessments_kind_check check (kind in ('adaptive','diagnostic','practice'));
-alter table public.assessments add column form_id text references public.practice_forms(id);
+alter table public.assessments add column if not exists form_id text references public.practice_forms(id);
+alter table public.assessments drop constraint if exists assessments_practice_form_check;
 alter table public.assessments add constraint assessments_practice_form_check
   check ((kind='practice' and form_id is not null) or (kind<>'practice' and form_id is null));
-create index assessments_user_form_status_idx on public.assessments(user_id,form_id,status,started_at desc);
+create index if not exists assessments_user_form_status_idx on public.assessments(user_id,form_id,status,started_at desc);
 
 create or replace function private.assessment(p_action text, p_id uuid, p_payload jsonb)
 returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -191,7 +217,7 @@ begin
 end $$;
 
 drop policy if exists practice_asset_read on storage.objects;
-drop table public.digital_test_progress;
-drop table public.practice_test_catalog;
+drop table if exists public.digital_test_progress;
+drop table if exists public.practice_test_catalog;
 
 commit;

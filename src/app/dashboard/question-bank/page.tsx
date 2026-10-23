@@ -1,8 +1,8 @@
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import BankFilters from "@/components/dashboard/BankFilters";
-import { getQuestionCollection, QUESTION_COLLECTIONS } from "@/lib/question-collections";
 
 export const dynamic = "force-dynamic";
 
@@ -30,7 +30,6 @@ type Stat = { total: number; answered: number; solved: number; missed: number };
 type Summary = Stat & { section: string; domain: string; skill: string | null; difficulty: string };
 
 type Search = {
-  collection?: string;
   status?: string;
   difficulty?: string;
 };
@@ -45,7 +44,6 @@ export default async function QuestionBankPage({
   if (!user) return null;
 
   const sp = await searchParams;
-  const collection = getQuestionCollection(sp.collection);
   const status =
     sp.status === "solved" || sp.status === "missed" ? sp.status : sp.status === "all" ? "all" : "unsolved";
   const difficulty =
@@ -53,7 +51,7 @@ export default async function QuestionBankPage({
       ? sp.difficulty
       : "";
 
-  const { data, error } = await supabase.rpc("question_bank_summary", { p_sources: collection?.sourceIds ?? null });
+  const { data, error } = await supabase.rpc("question_bank_summary", { p_sources: null });
   if (error) throw new Error("Could not load the question bank.");
   const summaries = (data ?? []) as Summary[];
   const answeredCount = summaries.reduce((sum,row) => sum + Number(row.answered), 0);
@@ -80,7 +78,6 @@ export default async function QuestionBankPage({
 
   const practiceHref = (scope: { section?: string; domain?: string; skill?: string }) => {
     const p = new URLSearchParams();
-    if (collection) p.set("collection", collection.id);
     if (scope.section) p.set("section", scope.section);
     if (scope.domain) p.set("domain", scope.domain);
     if (scope.skill) p.set("skill", scope.skill);
@@ -100,45 +97,13 @@ export default async function QuestionBankPage({
 
   return (
     <div className="dash-page">
+      <Link className="page-back" href="/dashboard"><ArrowLeft size={15} /> Back to dashboard</Link>
       <div className="dash-head">
         <div>
           <h1 className="dash-title">Question Bank</h1>
-          <p className="dash-sub">{collection?.title ?? "Approved SAT question library"}</p>
+          <p className="dash-sub">Approved SAT question library</p>
         </div>
       </div>
-
-      <section className="bank-imported-sets" aria-labelledby="imported-sets-title">
-        <div className="bank-imported-heading">
-          <div>
-            <p className="eyebrow">Imported collections</p>
-            <h2 id="imported-sets-title">New MSDC question sets</h2>
-          </div>
-          <span>{QUESTION_COLLECTIONS.reduce((sum, item) => sum + item.sourceIds.length, 0)} verified questions</span>
-        </div>
-        <div className="bank-collection-grid">
-          {QUESTION_COLLECTIONS.map((item) => {
-            const active = collection?.id === item.id;
-            const sectionLabel = item.section === "math" ? "Math" : "Reading & Writing";
-            return (
-              <article className={`bank-collection-card${active ? " active" : ""}`} key={item.id}>
-                <div>
-                  <span className="bank-collection-kicker">{sectionLabel} · PDF collection</span>
-                  <h3>{item.title}</h3>
-                  <p><strong>{item.sourceIds.length}</strong> official questions with answers and explanations</p>
-                </div>
-                <div className="bank-collection-actions">
-                  <Link className="btn btn-ghost" href={`/dashboard/question-bank?collection=${item.id}&status=all`}>
-                    {active ? "Viewing this set" : "View in bank"}
-                  </Link>
-                  <Link className="btn btn-primary" href={`/dashboard/session?collection=${item.id}&status=all`}>
-                    Start set
-                  </Link>
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
 
       <div className="bank-progress">
         <div className="bank-progress-text">
@@ -150,8 +115,7 @@ export default async function QuestionBankPage({
         </div>
       </div>
 
-      <BankFilters status={status} difficulty={difficulty} collection={collection?.id ?? ""}
-        collections={QUESTION_COLLECTIONS.map((item) => ({ id: item.id, title: item.title, count: item.sourceIds.length }))} />
+      <BankFilters status={status} difficulty={difficulty} />
 
       {visibleTotal === 0 ? (
         <div className="dash-empty">

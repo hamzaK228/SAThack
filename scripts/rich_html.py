@@ -34,8 +34,31 @@ import html as html_mod
 import re
 from html.parser import HTMLParser
 
-# Something we would lose by falling back to plain text.
-GRAPHIC_RE = re.compile(r"<(svg|img|table|figure)\b", re.IGNORECASE)
+# Something we would lose by falling back to plain text. `<u>` counts: many R&W
+# questions ask about "the underlined sentence/claim", so a stimulus kept only
+# as plain text makes those questions unanswerable.
+GRAPHIC_RE = re.compile(r"<(svg|img|table|figure|u)\b", re.IGNORECASE)
+
+# College Board marks the underlined "referenced content" as an inline style on a
+# span. HTML outside <svg> drops inline styles by design, so map that span to <u>
+# or the underline — and with it the question's meaning — is lost.
+UNDERLINE_STYLE_RE = re.compile(r"text-decoration\s*:\s*[^;]*underline", re.IGNORECASE)
+
+
+def underline_span_name(tag: str, attrs) -> str | None:
+    if tag != "span":
+        return None
+    for name, value in attrs:
+        if name and name.lower() == "style" and value and UNDERLINE_STYLE_RE.search(value):
+            return "u"
+    return None
+
+
+def worth_storing(markup: str) -> bool:
+    """True when the fragment carries content plain text would lose: media, or
+    an underline marker (in raw HTML it is still an inline style; once
+    sanitized it is a <u> tag)."""
+    return bool(GRAPHIC_RE.search(markup) or UNDERLINE_STYLE_RE.search(markup))
 
 SAFE_URL_RE = re.compile(r"^(?:#|data:image/|https://)", re.IGNORECASE)
 BAD_URL_RE = re.compile(r"^\s*(?:javascript|vbscript|data:text/html)", re.IGNORECASE)
@@ -150,7 +173,7 @@ class _Sanitizer(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
         self.parts: list[str] = []
-        self.stack: list[tuple[str, bool, bool]] = []
+        self.stack: list[tuple[str, bool, bool, str]] = []
         self.svg_depth = 0
         self.drop_depth = 0
 
@@ -194,15 +217,15 @@ class _Sanitizer(HTMLParser):
             out.append(f'{name}="{html_mod.escape(value, quote=True)}"')
         return (" " + " ".join(out)) if out else ""
 
-    def _emit(self, tag: str, attrs, self_closing: bool) -> None:
+    def _emit(self, tag: str, attrs, self_closing: bool, emit_as: str | None = None) -> None:
         in_svg = tag == "svg" or self.svg_depth > 0
         attrs_html = self._attrs(tag, attrs, in_svg)
-        name = SVG_TAG_CANON.get(tag, tag) if in_svg else tag
+        name = emit_as or (SVG_TAG_CANON.get(tag, tag) if in_svg else tag)
         if self_closing or tag in VOID:
             self.parts.append(f"<{name}{attrs_html}/>" if self_closing else f"<{name}{attrs_html}>")
             return
         self.parts.append(f"<{name}{attrs_html}>")
-        self.stack.append((tag, in_svg, True))
+        self.stack.append((tag, in_svg, True, name))
         if tag == "svg":
             self.svg_depth += 1
 
@@ -229,13 +252,14 @@ class _Sanitizer(HTMLParser):
             self.drop_depth = 1
             return
         in_svg = self.svg_depth > 0
+        emit_as = None if in_svg else underline_span_name(tag, attrs)
         # `<svg>` may open an SVG subtree from HTML context; everything else has
         # to match the context it is already in.
         allowed = ALLOWED_IN_SVG if in_svg else (ALLOWED_OUTSIDE_SVG | {"svg"})
         if tag not in allowed:
-            self.stack.append((tag, in_svg, False))  # unknown wrapper: keep its children
+            self.stack.append((tag, in_svg, False, tag))  # unknown wrapper: keep its children
             return
-        self._emit(tag, attrs, False)
+        self._emit(tag, attrs, False, emit_as)
 
     def handle_startendtag(self, tag: str, attrs) -> None:
         if self.drop_depth:
@@ -256,13 +280,11 @@ class _Sanitizer(HTMLParser):
                 self.drop_depth -= 1
             return
         while self.stack:
-            open_tag, was_svg, emitted = self.stack.pop()
+            open_tag, was_svg, emitted, emitted_name = self.stack.pop()
             # Only close what we actually opened: dropped wrappers (and tags that
             # never matched an allowlist) must not leak stray end tags.
             if emitted:
-                in_svg = was_svg
-                name = SVG_TAG_CANON.get(open_tag, open_tag) if in_svg else open_tag
-                self.parts.append(f"</{name}>")
+                self.parts.append(f"</{emitted_name}>")
             # SVG context is entered/left by <svg> alone — closing </g>, </path>
             # and friends must not end it early.
             if open_tag == "svg":
@@ -291,12 +313,12 @@ def sanitize_rich(raw_html: str | None) -> str | None:
     if not raw_html:
         return None
     cleaned = XML_NOISE_RE.sub("", raw_html)
-    if not GRAPHIC_RE.search(cleaned):
+    if not worth_storing(cleaned):
         return None
     parser = _Sanitizer()
     parser.feed(cleaned)
     parser.close()
     markup = _minify("".join(parser.parts))
-    if not markup or not GRAPHIC_RE.search(markup):
+    if not markup or not worth_storing(markup):
         return None
     return markup

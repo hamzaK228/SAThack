@@ -25,6 +25,43 @@ export function cleanExample(example: string | null | undefined): string | null 
 /** Mastery is capped so the review interval can't grow forever. */
 export const MASTERY_MAX = 5;
 
+/**
+ * The question bank stores HTML entities in its plain-text columns (`&rsquo;`,
+ * `&mdash;`), which is fine inside HTML but shows up literally in a sentence we
+ * splice into a card.
+ */
+export function decodeEntities(text: string): string {
+  return text
+    .replace(/&rsquo;|&#8217;/g, "\u2019")
+    .replace(/&lsquo;|&#8216;/g, "\u2018")
+    .replace(/&rdquo;|&#8221;/g, "\u201d")
+    .replace(/&ldquo;|&#8220;/g, "\u201c")
+    .replace(/&mdash;|&#8212;/g, "\u2014")
+    .replace(/&ndash;|&#8211;/g, "\u2013")
+    .replace(/&hellip;|&#8230;/g, "\u2026")
+    .replace(/&nbsp;|&#160;/g, " ")
+    .replace(/&quot;|&#34;/g, '"')
+    .replace(/&apos;|&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&#(\d+);/g, (_, code: string) => String.fromCharCode(Number(code)));
+}
+
+/**
+ * The word blanked out of its real SAT sentence. This is the exercise the exam
+ * itself sets — infer the word from context — so the card leads with it when the
+ * word has one, and falls back to the bare word when it doesn't.
+ */
+export function clozeSentence(sentence: string | null | undefined, word: string): string | null {
+  if (!sentence) return null;
+  const escaped = word.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (!escaped) return null;
+  const pattern = new RegExp(`\\b${escaped}\\b`, "i");
+  if (!pattern.test(sentence)) return null;
+  return sentence.replace(pattern, "\uFF3F\uFF3F\uFF3F\uFF3F\uFF3F\uFF3F");
+}
+
 /** Days until a word is shown again, indexed by its (new) mastery level. */
 const REVIEW_INTERVAL_DAYS = [0, 1, 2, 4, 7, 14, 30];
 
@@ -62,7 +99,9 @@ export function applyReview(state: { mastery: number; times_seen: number; times_
 
 /** A word is "due" once its scheduled review time has passed. */
 export function isDue(row: VocabProgress, now: Date = new Date()): boolean {
-  if (row.saved) return false;
+  // Saving a word used to exempt it from review forever, which is the opposite
+  // of what saving is for: starred words are still scheduled like any other, the
+  // star is just a bookmark.
   if (!row.next_review_at) return row.times_seen > 0;
   return new Date(row.next_review_at).getTime() <= now.getTime();
 }

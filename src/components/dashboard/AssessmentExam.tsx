@@ -66,11 +66,14 @@ export default function AssessmentExam({
   const [eliminating, setEliminating] = useState(false);
   const [eliminated, setEliminated] = useState<string[]>([]);
   const [notesOpen, setNotesOpen] = useState(false);
-  const [notes, setNotes] = useState(() =>
-    typeof window !== "undefined" && initial?.id
-      ? localStorage.getItem(`assessment-notes:${initial.id}`) ?? ""
-      : "",
-  );
+  const [notes, setNotes] = useState("");
+  // Read saved notes after mount (not in the state initializer) so the server
+  // and client render the same first paint — no hydration mismatch.
+  useEffect(() => {
+    if (!initial?.id) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is not readable during SSR; a lazy initializer would mismatch hydration
+    setNotes(localStorage.getItem(`assessment-notes:${initial.id}`) ?? "");
+  }, [initial?.id]);
   const offset = useRef(0);
   const lock = useRef(false);
   const queue = useRef<Promise<unknown>>(Promise.resolve());

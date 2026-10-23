@@ -1,7 +1,7 @@
 import { getProgressSummary } from "@/lib/progress-summary";
 
 export default async function RightRail() {
-  const {attempts:n,accuracy,level,streak,recent}=await getProgressSummary();
+  const { practiced, accuracy, level, streak, recent } = await getProgressSummary();
   return (
     <aside className="dash-rail">
       <div className="rail-card">
@@ -25,7 +25,7 @@ export default async function RightRail() {
         <span className="rail-card-label">Practice</span>
         <div className="rail-stat-grid">
           <div className="rail-stat">
-            <span className="rail-stat-num">{n}</span>
+            <span className="rail-stat-num">{practiced}</span>
             <span className="rail-stat-label">Questions</span>
           </div>
           <div className="rail-stat">

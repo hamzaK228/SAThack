@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "audit:practice-tests": "node scripts/audit_practice_draft.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
@@ -15,6 +16,7 @@
     "katex": "^0.18.7",
     "lucide-react": "^1.47.0",
     "next": "16.3.4",
+    "pdfjs-dist": "^4.10.38",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

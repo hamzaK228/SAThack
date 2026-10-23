@@ -1,7 +1,11 @@
+import { Suspense } from "react";
 import { CountUp, Reveal } from "@/components/Reveal";
 import PlanChecklist from "@/components/dashboard/PlanChecklist";
 import RegeneratePlanButton from "@/components/dashboard/RegeneratePlanButton";
+import { PlanSkeleton } from "@/components/dashboard/Skeletons";
 import { getStudyPlan } from "@/lib/study-plan-data";
+import { setStudyMinutes } from "@/app/dashboard/plan-actions";
+import PlanAdjustments from "@/components/dashboard/PlanAdjustments";
 import { taskKey } from "@/lib/plan";
 import { BookOpenCheck, CalendarDays, Clock3, ExternalLink, Gauge, Target } from "lucide-react";
 
@@ -35,8 +39,30 @@ const PHASE_LABEL = {
 
 export const dynamic = "force-dynamic";
 
-export default async function PlanPage() {
+export default function PlanPage() {
   // Same engine the dashboard preview uses — see src/lib/study-plan-data.ts.
+  // The body streams separately: when the narrative needs an AI regeneration
+  // this page still paints instantly (it can take ~30s after new practice).
+  return (
+    <div className="dash-page">
+      <div className="dash-head">
+        <div>
+          <h1 className="dash-title">Study plan</h1>
+          <p className="dash-sub">
+            Built from your score, mistakes and the SAT books — rebalanced whenever your accuracy
+            shifts.
+          </p>
+        </div>
+        <RegeneratePlanButton />
+      </div>
+      <Suspense fallback={<PlanSkeleton />}>
+        <PlanBody />
+      </Suspense>
+    </div>
+  );
+}
+
+async function PlanBody() {
   const bundle = await getStudyPlan();
   if (!bundle) return null;
   const { plan } = bundle;
@@ -50,19 +76,14 @@ export default async function PlanPage() {
 
 
   return (
-    <div className="dash-page">
-      <div className="dash-head">
-        <div>
-          <h1 className="dash-title">Study plan</h1>
-          <p className="dash-sub">
-            {plan.source === "ai"
-              ? "✨ AI-generated from your score, mistakes and the SAT books."
-              : "Personalized from your score, mistakes and the SAT books."}
-            {plan.daysLeft !== null ? ` · ${plan.daysLeft} days until test day` : ""}
-          </p>
-        </div>
-        <RegeneratePlanButton />
-      </div>
+    <>
+      <p className="dash-sub" style={{ marginTop: 0 }}>
+        {plan.source === "ai"
+          ? "✨ Built from your score, your mistakes and the SAT books."
+          : "Personalized from your score, mistakes and the SAT books."}
+        {plan.daysLeft !== null ? ` · ${plan.daysLeft} days until test day` : ""}
+        {" · domains you have already drilled today are ticked for you."}
+      </p>
 
       <Reveal>
         <section className="plan-command" aria-label="Plan overview">
@@ -75,11 +96,44 @@ export default async function PlanPage() {
             </div>
           </div>
           <div className="plan-command-metrics">
-            <span><CalendarDays size={16} /><strong>{plan.weeks}</strong> weeks</span>
+            <span><CalendarDays size={16} /><strong>{plan.weeks}</strong> week{plan.weeks === 1 ? "" : "s"}</span>
             <span><Clock3 size={16} /><strong>{plan.weeklyMinutes}</strong> min this week</span>
             <span><Gauge size={16} /><strong>{PHASE_LABEL[plan.tasks[0]?.phase ?? "foundation"]}</strong> phase</span>
           </div>
         </section>
+      </Reveal>
+
+      <Reveal>
+        <form className="plan-budget" action={setStudyMinutes}>
+          <label htmlFor="plan-minutes">
+            <strong>How long is a normal study day?</strong>
+            <span>
+              The plan is built inside this budget, currently about {plan.dailyMinutes} min a day. Leave the field empty
+              and the planner decides from your test date and your gap to target.
+            </span>
+          </label>
+          <div className="plan-budget-input">
+            <input
+              id="plan-minutes"
+              className="field-input"
+              type="number"
+              name="minutes"
+              min={10}
+              max={600}
+              step={5}
+              placeholder="auto"
+              defaultValue={bundle.minutesPerDay ?? ""}
+            />
+            <span>min</span>
+            <button className="btn btn-primary" type="submit">
+              Save
+            </button>
+          </div>
+        </form>
+      </Reveal>
+
+      <Reveal>
+        <PlanAdjustments />
       </Reveal>
 
       <Reveal>
@@ -262,6 +316,6 @@ export default async function PlanPage() {
           </div>
         </Reveal>
       ))}
-    </div>
+    </>
   );
 }

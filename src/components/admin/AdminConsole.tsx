@@ -34,6 +34,7 @@ import {
 } from "@/app/admin/actions";
 import { DOMAIN_ORDER } from "@/lib/plan";
 import { createClient } from "@/lib/supabase/client";
+import TestBuilder from "./TestBuilder";
 
 type AdminUser = {
   id: string;
@@ -268,10 +269,12 @@ export default function AdminConsole({
           </form>
         </div>
 
+        <TestBuilder />
+
         <div className="admin-inventory-grid">
-          <Inventory title="Recent questions" items={questions} entity="question" pending={pending} remove={remove} />
-          <Inventory title="Recent vocabulary" items={vocab} entity="vocab_word" pending={pending} remove={remove} />
-          <Inventory title="Practice tests" items={tests} entity="practice_test" pending={pending} remove={remove} />
+          <Inventory title="Recent questions" items={questions} entity="question" pending={pending} remove={remove} browseHref="/admin/questions" />
+          <Inventory title="Recent vocabulary" items={vocab} entity="vocab_word" pending={pending} remove={remove} browseHref="/admin/vocab" />
+          <Inventory title="Practice tests" items={tests} entity="practice_test" pending={pending} remove={remove} browseHref="/admin/tests" />
         </div>
       </section>
 
@@ -307,8 +310,8 @@ export default function AdminConsole({
   );
 }
 
-function Inventory({ title, items, entity, pending, remove }: { title: string; items: ContentItem[]; entity: string; pending: boolean; remove: (entity: string, id: string, label: string) => void }) {
-  return <div className="admin-list-card"><header><h3>{title}</h3><span>{items.length}</span></header>{items.length ? items.map((item) => <article key={item.id}><div><strong>{item.label}</strong><p>{item.meta}</p></div><button onClick={() => remove(entity, item.id, item.label)} disabled={pending} aria-label={`Delete ${item.label}`}><Trash2 size={15} /></button></article>) : <Empty text="Nothing here yet." />}</div>;
+function Inventory({ title, items, entity, pending, remove, browseHref }: { title: string; items: ContentItem[]; entity: string; pending: boolean; remove: (entity: string, id: string, label: string) => void; browseHref?: string }) {
+  return <div className="admin-list-card"><header><h3>{title}</h3>{browseHref ? <Link href={browseHref}>View all →</Link> : null}<span>{items.length}</span></header>{items.length ? items.map((item) => <article key={item.id}><div><strong>{item.label}</strong><p>{item.meta}</p></div><button onClick={() => remove(entity, item.id, item.label)} disabled={pending} aria-label={`Delete ${item.label}`}><Trash2 size={15} /></button></article>) : <Empty text="Nothing here yet." />}</div>;
 }
 
 function Empty({ text }: { text: string }) {

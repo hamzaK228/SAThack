@@ -12,11 +12,18 @@ export default function RegeneratePlanButton() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [done, setDone] = useState(false);
+  const [error, setError] = useState("");
 
   function run() {
     setDone(false);
+    setError("");
     startTransition(async () => {
-      await regeneratePlan();
+      const result = await regeneratePlan();
+      if (!result.ok) {
+        setError(result.error ?? "Could not re-plan. Please try again.");
+        setTimeout(() => setError(""), 4000);
+        return;
+      }
       router.refresh();
       setDone(true);
       setTimeout(() => setDone(false), 2500);
@@ -24,8 +31,11 @@ export default function RegeneratePlanButton() {
   }
 
   return (
-    <button className="btn btn-primary" onClick={run} disabled={pending}>
-      {pending ? "Re-planning…" : done ? "Plan updated ✓" : "✨ Re-plan with AI"}
-    </button>
+    <div>
+      <button className="btn btn-primary" onClick={run} disabled={pending}>
+        {pending ? "Re-planning…" : done ? "Plan updated ✓" : "✨ Re-plan with AI"}
+      </button>
+      <p role="status">{error}</p>
+    </div>
   );
 }

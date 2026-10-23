@@ -14,7 +14,12 @@ export async function GET() {
     "diagnostics",
     "study_plans",
     "plan_tasks",
+    "plan_adjustments",
     "vocab_progress",
+    "vocab_lists",
+    "attempt_notes",
+    "question_reports",
+    "share_tokens",
   ];
   const data: Record<string, unknown> = {
     exportedAt: new Date().toISOString(),

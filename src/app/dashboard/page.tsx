@@ -12,33 +12,58 @@ import { getProgressSummary } from "@/lib/progress-summary";
 
 export const dynamic = "force-dynamic";
 
+async function loadDashboardRows(userId: string) {
+  const query = async () => {
+    const supabase = await createClient();
+    return Promise.all([
+      supabase
+        .from("profiles")
+        .select("full_name, target_score, test_date, current_score, username")
+        .eq("id", userId)
+        .maybeSingle(),
+      supabase
+        .from("diagnostics")
+        .select("total_score, rw_score, math_score, completed_at")
+        .eq("user_id", userId)
+        .order("completed_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+  };
+
+  let result = await query();
+  if (result[0].error || result[1].error) result = await query();
+  return result;
+}
+
 export default async function DashboardHome() {
-  const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) return null;
 
-  const profileQuery = supabase
-    .from("profiles")
-    .select("full_name, target_score, test_date, current_score")
-    .eq("id", user.id)
-    .single();
-
-  const diagnosticQuery = supabase
-    .from("diagnostics")
-    .select("total_score, rw_score, math_score, completed_at")
-    .eq("user_id", user.id)
-    .order("completed_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  const [{data:profile,error:profileError},{data:diagnostic,error:diagnosticError},progress] = await Promise.all([profileQuery,diagnosticQuery,getProgressSummary()]);
-  if(profileError || diagnosticError) throw new Error("Could not load your dashboard.");
+  const [[{data:profile,error:profileError},{data:diagnostic,error:diagnosticError}],progress] = await Promise.all([
+    loadDashboardRows(user.id),
+    getProgressSummary(),
+  ]);
+  if (profileError || diagnosticError) {
+    console.error(
+      "[dashboard] data query failed",
+      "profile=",
+      profileError ? `${profileError.code}: ${profileError.message}; ${profileError.details}; ${profileError.hint}` : "ok",
+      "diagnostic=",
+      diagnosticError ? `${diagnosticError.code}: ${diagnosticError.message}; ${diagnosticError.details}; ${diagnosticError.hint}` : "ok",
+    );
+    throw new Error("Could not load your dashboard.");
+  }
   const n=progress.attempts;
   const accuracy=n ? progress.accuracy : null;
   const name=profile?.full_name?.split(" ")[0] || "there";
   const isNew=!diagnostic && n===0;
   const heatDays=progress.days;
   const {streak,xp,level}=progress;
+  // Accounts created through Google/GitHub never pass the signup form, so the
+  // profiles trigger hands them `student_<id>` for the leaderboard. Offer them a
+  // real handle until they pick one.
+  const autoNickname=/^student_[0-9a-f]{16}$/.test(profile?.username ?? "");
 
   return (
     <div className="dash-page">
@@ -71,6 +96,23 @@ export default async function DashboardHome() {
             testDate={profile?.test_date ?? null}
           />
         </Reveal>
+
+        {autoNickname && (
+          <Reveal>
+            <div className="dash-card dash-nick">
+              <div className="dash-nick-text">
+                <strong>Pick your nickname</strong>
+                <span>
+                  You&apos;re <code>{profile?.username}</code> right now, and that&apos;s the name the
+                  leaderboard shows. Choose the handle you actually want — it disappears once you do.
+                </span>
+              </div>
+              <Link className="btn btn-ghost" href="/dashboard/community">
+                Choose a nickname →
+              </Link>
+            </div>
+          </Reveal>
+        )}
 
         <div className="dash-stat-grid">
           <Reveal>

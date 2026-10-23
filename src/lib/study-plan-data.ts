@@ -33,7 +33,19 @@ export type PlanWithProgress = GeneratedPlan & {
   done: Record<string, boolean>;
 };
 
-export type PlanBundle = { userId: string; plan: PlanWithProgress };
+export type PlanBundle = {
+  userId: string;
+  plan: PlanWithProgress;
+  skillStats: SkillStat[];
+  /** When this student last answered anything — the mentor notices gaps. */
+  lastPractisedAt: string | null;
+  /** task_key → the date until which the student pushed that step out of "today". */
+  snoozed: Record<string, string>;
+  /** The student's own daily budget, or null when the planner is choosing. */
+  minutesPerDay: number | null;
+  /** Questions this student actually answers on an average day, last 7 days. */
+  recentQuestionsPerDay: number | null;
+};
 
 type Attempt = {
   question_id: string | null;
@@ -53,6 +65,7 @@ type Attempt = {
 function planSignature(input: {
   targetScore: number;
   currentScore: number | null;
+  testDate: string | null;
   model: string | null;
   attempts: Attempt[];
   correct: number;
@@ -61,6 +74,10 @@ function planSignature(input: {
   return [
     input.targetScore,
     input.currentScore ?? "-",
+    // The schedule is rebuilt on every render, but the written narrative is
+    // reused — and it talks about the timeline, so moving the test date has to
+    // invalidate it or the plan keeps saying "seven weeks out" when it is five.
+    input.testDate ?? "no-date",
     input.model ?? "default",
     input.attempts.length,
     input.correct,
@@ -75,7 +92,7 @@ async function loadPlan(force = false): Promise<PlanBundle | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("target_score, current_score, test_date, ai_model")
+    .select("target_score, current_score, test_date, ai_model, study_minutes_per_day")
     .eq("id", user.id)
     .maybeSingle();
 
@@ -101,6 +118,28 @@ async function loadPlan(force = false): Promise<PlanBundle | null> {
     s.total += 1;
     if (a.is_correct) s.correct += 1;
     statsMap.set(d, s);
+  }
+
+  // The diagnostic stores its own per-domain breakdown, and until now nothing
+  // read it. A brand-new student has almost no attempts, so every domain looked
+  // "new" and the plan had nothing real to aim at; seeding the gaps from the
+  // diagnostic gives week one actual weaknesses to work on. Domains already
+  // measured by real practice are left alone so nothing is counted twice.
+  const { data: diagnostic } = await supabase
+    .from("diagnostics")
+    .select("domain_breakdown")
+    .eq("user_id", user.id)
+    .order("completed_at", { ascending: false })
+    .maybeSingle();
+  const breakdown = (diagnostic?.domain_breakdown ?? null) as
+    | Record<string, { correct?: number; total?: number }>
+    | null;
+  if (breakdown) {
+    for (const [domain, value] of Object.entries(breakdown)) {
+      const total = Number(value?.total ?? 0);
+      if (!domain || !Number.isFinite(total) || total <= 0 || statsMap.has(domain)) continue;
+      statsMap.set(domain, { domain, correct: Number(value?.correct ?? 0), total });
+    }
   }
 
   // Skill + difficulty come from the questions table.
@@ -156,6 +195,7 @@ async function loadPlan(force = false): Promise<PlanBundle | null> {
     targetScore: profile?.target_score ?? 1400,
     currentScore: profile?.current_score ?? null,
     testDate: profile?.test_date ?? null,
+    minutesPerDay: profile?.study_minutes_per_day ?? null,
     domainStats: [...statsMap.values()],
     skillStats,
     mistakes,
@@ -165,6 +205,7 @@ async function loadPlan(force = false): Promise<PlanBundle | null> {
   const signature = planSignature({
     targetScore: ctx.targetScore,
     currentScore: ctx.currentScore,
+    testDate: ctx.testDate,
     model,
     attempts,
     correct: attempts.filter((a) => a.is_correct).length,
@@ -215,18 +256,86 @@ async function loadPlan(force = false): Promise<PlanBundle | null> {
   }
 
   // Persisted check-off state (empty when the migration hasn't been applied).
+  // Chunked: one `.in()` carrying every key of a long plan silently truncated at
+  // 250, so a task ticked in a later week never came back after a reload.
   const done: Record<string, boolean> = {};
+  const snoozed: Record<string, string> = {};
+  const difficultyOverrides: Record<string, string> = {};
   const keys = generated.tasks.map(taskKey);
-  if (keys.length) {
+  for (let index = 0; index < keys.length; index += 200) {
     const { data: rows } = await supabase
       .from("plan_tasks")
-      .select("task_key, done")
+      .select("task_key, done, snoozed_until, difficulty_override")
       .eq("user_id", user.id)
-      .in("task_key", keys.slice(0, 250));
-    for (const row of rows ?? []) done[row.task_key] = row.done;
+      .in("task_key", keys.slice(index, index + 200));
+    for (const row of rows ?? []) {
+      done[row.task_key] = row.done;
+      if (row.snoozed_until) snoozed[row.task_key] = row.snoozed_until;
+      if (row.difficulty_override) difficultyOverrides[row.task_key] = row.difficulty_override;
+    }
   }
 
-  return { userId: user.id, plan: { ...generated, done } };
+  // The one lever the student (or the agent, with their consent) may pull: a task's
+  // difficulty. Applied after the rules have had their say, so it always wins.
+  if (Object.keys(difficultyOverrides).length) {
+    for (const task of generated.tasks) {
+      const override = difficultyOverrides[taskKey(task)];
+      if (override && task.difficulty) task.difficulty = override as typeof task.difficulty;
+    }
+  }
+
+  // Work already done today counts. A domain drilled properly today means the
+  // plan's task for that domain is genuinely finished, checkbox or not — the app
+  // can see the answers, so it should tick the box itself.
+  const today = new Date().toISOString().slice(0, 10);
+  const practisedToday = new Map<string, number>();
+  for (const a of attempts) {
+    if (!a.created_at || a.created_at.slice(0, 10) !== today) continue;
+    const domain = a.domain || "Other";
+    practisedToday.set(domain, (practisedToday.get(domain) ?? 0) + 1);
+  }
+  for (const task of generated.tasks) {
+    if (!task.domain || (task.kind !== "practice" && task.kind !== "learn")) continue;
+    if ((practisedToday.get(task.domain) ?? 0) < 10) continue;
+    done[taskKey(task)] = true;
+  }
+
+  // Coming back after a long gap, the plan should meet the student where they
+  // are: drop the heaviest step of week one and shorten the rest. A full
+  // schedule on the first day back is how a return turns into a resignation.
+  const gapDays = attempts[0]?.created_at
+    ? Math.floor((Date.now() - new Date(attempts[0].created_at).getTime()) / 86_400_000)
+    : null;
+  if (gapDays !== null && gapDays >= 5) {
+    const week1 = generated.tasks.filter((task) => task.week === 1);
+    const heaviest = [...week1].sort((a, b) => b.minutes - a.minutes)[0];
+    if (heaviest && week1.length > 2) {
+      generated.tasks = generated.tasks.filter((task) => task.id !== heaviest.id);
+    }
+    for (const task of generated.tasks.filter((t) => t.week === 1)) {
+      task.minutes = Math.max(10, Math.round(task.minutes * 0.6));
+    }
+  }
+
+  // How much this student actually does in a day. The mission is sized to this
+  // rather than to what the plan assumed: someone answering ten questions a day
+  // should be given one focused step, not three they will never finish.
+  const weekAgo = Date.now() - 7 * 86_400_000;
+  const recentAttempts = attempts.filter(
+    (a) => a.created_at && new Date(a.created_at).getTime() >= weekAgo
+  );
+  const recentQuestionsPerDay = attempts.length ? Math.round(recentAttempts.length / 7) : null;
+
+  // `attempts` is newest-first, so the head is the last time they answered.
+  return {
+    userId: user.id,
+    plan: { ...generated, done },
+    skillStats,
+    lastPractisedAt: attempts[0]?.created_at ?? null,
+    snoozed,
+    minutesPerDay: profile?.study_minutes_per_day ?? null,
+    recentQuestionsPerDay,
+  };
 }
 
 /** Request-scoped memoised study plan (AI engine + persisted progress). */

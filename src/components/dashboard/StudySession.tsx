@@ -7,21 +7,36 @@ import QuestionText from "@/components/QuestionText";
 import ReferenceSheet from "./ReferenceSheet";
 const DesmosCalculator = dynamic(() => import("./DesmosCalculator"));
 const Tutor = dynamic(() => import("./Tutor"));
-import { loadSessionQuestions, recordAttempt, toggleSave } from "@/app/dashboard/actions";
+import { loadSessionQuestions, checkAttempt, toggleSave } from "@/app/dashboard/actions";
+import { explainAttempt } from "@/app/dashboard/feature-actions";
+import QuestionReportButton from "@/components/dashboard/QuestionReportButton";
 import { QUESTION_BATCH_SIZE, type SessionQuestion } from "@/lib/session-questions";
-import { isCorrectAnswer as isCorrect } from "@/lib/question-answer";
+import { markStatsDirty } from "@/lib/stats-dirty";
 
-export default function StudySession({ questions: initialQuestions, questionIds, initialSavedIds = [] }: {
-  questions: SessionQuestion[]; questionIds: string[]; initialSavedIds?: string[];
+export default function StudySession({ questions: initialQuestions, questionIds, initialSavedIds = [], review = false, savedOnly = false, mastery = false }: {
+  questions: SessionQuestion[]; questionIds: string[]; initialSavedIds?: string[]; review?: boolean; savedOnly?: boolean; mastery?: boolean;
 }) {
   const [questions, setQuestions] = useState(initialQuestions);
+  // Freeze the deck at mount: the stats refresh after each answer re-renders
+  // the page, and in status-filtered sessions (unsolved/missed/solved) the
+  // answered question drops out of the server's id list — shifting the prop
+  // under this component while `questions` state stays from mount. Navigating
+  // by the live prop desynced the shown question from the identity marker and
+  // left the Check spinner stuck from question 2. A session's deck is fixed
+  // the moment it opens.
+  const deck = useRef(questionIds).current;
   const loadedCount = useRef(initialQuestions.length);
   const batchPromise = useRef<Promise<void> | null>(null);
   const [advancing, setAdvancing] = useState(false);
   const advancingRef = useRef(false);
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<string | null>(null);
-  const [checked, setChecked] = useState(false);
+  const [feedback, setFeedback] = useState<"idle" | "incorrect" | "correct">("idle");
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [firstAttemptRecorded, setFirstAttemptRecorded] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const checkingRef = useRef(false);
+  const feedbackRef = useRef<HTMLDivElement>(null);
   const [seconds, setSeconds] = useState(0);
   const [showRef, setShowRef] = useState(false);
   const [showCalc, setShowCalc] = useState(false);
@@ -30,33 +45,68 @@ export default function StudySession({ questions: initialQuestions, questionIds,
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [masteryStreak, setMasteryStreak] = useState(0);
+  const [explaining, setExplaining] = useState(false);
+  const [explainError, setExplainError] = useState<string | null>(null);
   const currentId = useRef(questions[0]?.id);
   const [highlightOn, setHighlightOn] = useState(false);
   const passageRef = useRef<HTMLDivElement>(null);
 
   const loadMore = useCallback(() => {
     if (batchPromise.current) return batchPromise.current;
-    const ids = questionIds.slice(loadedCount.current, loadedCount.current + QUESTION_BATCH_SIZE);
+    const ids = deck.slice(loadedCount.current, loadedCount.current + QUESTION_BATCH_SIZE);
     if (!ids.length) return Promise.resolve();
-    const promise = loadSessionQuestions(ids).then((batch) => {
+    const promise = loadSessionQuestions(ids, review || savedOnly ? { officialOnly: false } : undefined).then((batch) => {
       loadedCount.current += batch.questions.length;
       setQuestions((previous) => previous.concat(batch.questions));
       setSavedIds((previous) => new Set([...previous, ...batch.savedIds]));
     }).finally(() => { batchPromise.current = null; });
     batchPromise.current = promise;
     return promise;
-  }, [questionIds]);
+  }, [deck, review, savedOnly]);
 
   useEffect(() => {
-    if (index >= questions.length - 5 && questions.length < questionIds.length) {
+    if (index >= questions.length - 5 && questions.length < deck.length) {
       void loadMore().catch(() => { /* Next retries a failed background request. */ });
     }
-  }, [index, questions.length, questionIds.length, loadMore]);
+  }, [index, questions.length, deck.length, loadMore]);
 
   useEffect(() => {
     const t = window.setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => window.clearInterval(t);
   }, []);
+
+  // Keyboard flow for fast drilling: A–D select, Enter checks / advances,
+  // → advances after a correct answer, ← steps back to the previous question.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA")) return;
+      if (showRef || showCalc || showTutor) return;
+      const current = questions[index];
+      if (!current) return;
+      const key = e.key.toLowerCase();
+      if (!current.is_grid_in && ["a", "b", "c", "d"].includes(key)) {
+        const choice = (current.choices ?? []).find((c) => c.label.toLowerCase() === key);
+        if (choice && feedback !== "correct" && !checking) {
+          setSelected(choice.label);
+          if (feedback === "incorrect") setFeedback("idle");
+        }
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (feedback === "correct") void next();
+        else if (selected?.trim() && !checking) void check();
+        return;
+      }
+      if (e.key === "ArrowRight" && feedback === "correct" && !advancing) void next();
+      if (e.key === "ArrowLeft" && !advancing && !checking) previous();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questions, index, selected, feedback, checking, advancing, showRef, showCalc, showTutor]);
 
   function fmt(s: number) {
     const m = Math.floor(s / 60);
@@ -74,8 +124,8 @@ export default function StudySession({ questions: initialQuestions, questionIds,
 
   const q = questions[index];
   const saved = savedIds.has(q.id);
-  const correct = checked && selected !== null ? isCorrect(selected, q.correct_answer) : null;
-  const progress = Math.round(((index + (checked ? 1 : 0)) / questionIds.length) * 100);
+  const solved = feedback === "correct";
+  const progress = Math.round(((index + (solved ? 1 : 0)) / deck.length) * 100);
   const isRW = q.section === "reading_writing";
 
   // Shared answer + feedback blocks, rendered either in the two-pane R&W layout
@@ -87,23 +137,29 @@ export default function StudySession({ questions: initialQuestions, questionIds,
       inputMode="decimal"
       placeholder="Type your answer…"
       value={selected ?? ""}
-      disabled={checked}
-      onChange={(e) => setSelected(e.target.value)}
+      disabled={solved || checking}
+      onChange={(e) => {
+        setSelected(e.target.value);
+        if (feedback === "incorrect") setFeedback("idle");
+      }}
     />
   ) : (
     <div className="session-choices">
       {(q.choices ?? []).map((c) => {
         const isSelected = selected === c.label;
-        const isRight = checked && c.label === q.correct_answer;
-        const isWrong = checked && isSelected && c.label !== q.correct_answer;
+        const isRight = solved && isSelected;
+        const isWrong = feedback === "incorrect" && isSelected;
         return (
           <button
             key={c.label}
             className={`session-choice${isSelected ? " selected" : ""}${isRight ? " right" : ""}${
               isWrong ? " wrong" : ""
             }`}
-            disabled={checked}
-            onClick={() => setSelected(c.label)}
+            disabled={solved || checking}
+            onClick={() => {
+              setSelected(c.label);
+              if (feedback === "incorrect") setFeedback("idle");
+            }}
           >
             <span className="session-choice-label">{c.label}</span>
             <span className="session-choice-text">
@@ -115,38 +171,130 @@ export default function StudySession({ questions: initialQuestions, questionIds,
     </div>
   );
 
-  const feedbackBlock = checked && (
-    <div className={`session-feedback ${correct ? "ok" : "bad"}`}>
+  const feedbackBlock = feedback !== "idle" && (
+    <div className={`session-feedback ${solved ? "ok" : "bad"}`} role="status" ref={feedbackRef}>
       <p className="session-feedback-title">
-        {correct ? "Correct ✓" : `Incorrect — the answer is ${q.correct_answer}`}
+        {solved ? "Correct ✓" : "Not quite — try again."}
       </p>
-      {q.explanation && (
+      {solved && mastery && masteryStreak < 3 && (
+        <p className="session-feedback-note">
+          {masteryStreak} of 3 in a row. Get it right once more to lock it in.
+        </p>
+      )}
+      {!solved && (
+        <p className="session-feedback-note">
+          This question stays in your review queue. Choose another answer, or see the explanation.
+        </p>
+      )}
+      {!explanation && (
+        <button
+          className="btn btn-ghost session-explain-btn"
+          type="button"
+          onClick={() => void revealExplanation()}
+          disabled={explaining}
+        >
+          {explaining ? "Loading explanation…" : "Show explanation"}
+        </button>
+      )}
+      {explanation && (
         <div className="session-explanation">
-          <MathText text={q.explanation} />
+          <MathText text={explanation} />
         </div>
       )}
+      {explainError && <p className="session-feedback-note" role="alert">{explainError}</p>}
     </div>
   );
 
   async function check() {
-    if (!selected?.trim() || checked) return;
+    if (!selected?.trim() || solved || checkingRef.current) return;
+    // Mastery records every try so the three-in-a-row rule is judged by the
+    // database, not by this component's memory. Normal drills record only the
+    // first attempt and let a correct retry be the mastery signal.
+    const shouldRecord = mastery ? true : !firstAttemptRecorded;
+    checkingRef.current = true;
+    setChecking(true);
     setActionError(null);
-    setChecked(true);
+    setExplainError(null);
     try {
-      const result = await recordAttempt({
+      // The answer key never ships to the browser: the server grades against
+      // the stored answer and only sends back the verdict (plus the official
+      // explanation once the student has it right).
+      const result = await checkAttempt({
         question_id: q.id,
         selected_answer: selected,
+        record: shouldRecord,
+        force: mastery,
       });
       if (!result.ok) throw new Error("Attempt could not be saved");
+      if (currentId.current !== q.id) return;
+      if (shouldRecord) {
+        setFirstAttemptRecorded(true);
+      }
+      if (result.recorded) {
+        // The attempt changed XP / accuracy / streak — let the rail refresh.
+        markStatsDirty();
+      }
+      setExplanation(result.explanation ?? null);
+      setFeedback(result.correct ? "correct" : "incorrect");
+      setMasteryStreak((previous) => (result.correct ? previous + 1 : 0));
+      requestAnimationFrame(() => {
+        feedbackRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
     } catch {
       setActionError("Your answer could not be saved. Check your connection and try again.");
-      if (currentId.current === q.id) setChecked(false);
+    } finally {
+      checkingRef.current = false;
+      if (currentId.current === q.id) setChecking(false);
     }
+  }
+
+  async function revealExplanation() {
+    if (explaining) return;
+    const id = q.id;
+    setExplaining(true);
+    setExplainError(null);
+    try {
+      const result = await explainAttempt(id);
+      if (currentId.current !== id) return;
+      if (!result.ok) throw new Error(result.error ?? "Could not load the explanation.");
+      setExplanation(result.explanation ?? "No explanation is available for this one yet.");
+    } catch (error) {
+      if (currentId.current === id) {
+        setExplainError(error instanceof Error ? error.message : "Could not load the explanation.");
+      }
+    } finally {
+      if (currentId.current === id) setExplaining(false);
+    }
+  }
+
+  function previous() {
+    if (index === 0) return;
+    const previousIndex = index - 1;
+    setSelected(null);
+    setFeedback("idle");
+    setExplanation(null);
+    setFirstAttemptRecorded(false);
+    setChecking(false);
+    setActionError(null);
+    setMasteryStreak(0);
+    setExplainError(null);
+    currentId.current = deck[previousIndex];
+    setIndex(previousIndex);
   }
 
   async function next() {
     if (advancingRef.current) return;
-    const nextIndex = index < questionIds.length - 1 ? index + 1 : 0;
+    // Mastery keeps the same question until three correct answers in a row.
+    if (mastery && feedback === "correct" && masteryStreak < 3) {
+      setSelected(null);
+      setFeedback("idle");
+      setExplanation(null);
+      setExplainError(null);
+      setFirstAttemptRecorded(true);
+      setChecking(false);
+      return;
+    }
+    const nextIndex = index < deck.length - 1 ? index + 1 : 0;
     if (nextIndex >= loadedCount.current) {
       advancingRef.current = true;
       setAdvancing(true);
@@ -161,9 +309,14 @@ export default function StudySession({ questions: initialQuestions, questionIds,
       }
     }
     setSelected(null);
-    setChecked(false);
+    setFeedback("idle");
+    setExplanation(null);
+    setFirstAttemptRecorded(false);
+    setChecking(false);
     setActionError(null);
-    currentId.current = questionIds[nextIndex];
+    setMasteryStreak(0);
+    setExplainError(null);
+    currentId.current = deck[nextIndex];
     setIndex(nextIndex);
   }
 
@@ -236,10 +389,11 @@ export default function StudySession({ questions: initialQuestions, questionIds,
       <div className="session-top">
         <div className="session-meta">
           <span className="session-qnum">
-            Question {index + 1}/{questionIds.length}
+            Question {index + 1}
           </span>
           <span className="session-chip">{q.difficulty}</span>
           <span className="session-chip">{q.domain}</span>
+          {mastery && <span className="session-chip mastery-chip">Mastery {Math.min(masteryStreak, 3)}/3</span>}
           <span className="session-timer" aria-label="Elapsed time">
             ⏱ {fmt(seconds)}
           </span>
@@ -331,12 +485,22 @@ export default function StudySession({ questions: initialQuestions, questionIds,
         >
           {saved ? "★ Saved" : "☆ Save"}
         </button>
-          <button className="btn btn-primary" onClick={check} disabled={checked || !selected?.trim()}>
-            Check
+          <button className="btn btn-primary" onClick={check} disabled={solved || checking || !selected?.trim()}>
+            {checking ? "Checking…" : feedback === "incorrect" ? "Try answer" : "Check"}
           </button>
-          <button className="btn btn-ghost" onClick={next} disabled={advancing}>
-            {advancing ? "Loading..." : index < questionIds.length - 1 ? "Next question →" : "Restart"}
+          <button className="btn btn-ghost" onClick={previous} disabled={advancing || checking || index === 0}>
+            ← Previous question
           </button>
+          <button className="btn btn-ghost" onClick={next} disabled={advancing || checking}>
+            {advancing
+              ? "Loading..."
+              : mastery && solved && masteryStreak < 3
+                ? `Next attempt (${masteryStreak}/3)`
+                : index < deck.length - 1
+                  ? "Next question →"
+                  : "New set ↻"}
+          </button>
+          <QuestionReportButton questionId={q.id} />
       </div>
 
       {showCalc && <DesmosCalculator open={showCalc} onClose={() => setShowCalc(false)} />}
@@ -346,8 +510,8 @@ export default function StudySession({ questions: initialQuestions, questionIds,
         question={q.question_text}
         skill={q.skill}
         domain={q.domain}
-        explanation={q.explanation}
-        correctAnswer={q.correct_answer}
+        explanation={feedback === "correct" ? explanation : null}
+        correctAnswer={feedback === "correct" ? (selected ?? "") : ""}
       />}
     </div>
   );

@@ -12,19 +12,18 @@ const subscribe=(callback:()=>void)=>{const query=window.matchMedia(mobileQuery)
 const nav = [
   { href: "/dashboard", label: "Home", icon: "⌂" },
   { href: "/dashboard/plan", label: "Study Plan", icon: "▤" },
-  { href: "/dashboard/tutor", label: "AI Tutor", icon: "🤖" },
   { href: "/dashboard/community", label: "Community", icon: "◎" },
+  { href: "/dashboard/duel", label: "Duel", icon: "⚔" },
   { href: "/dashboard/analytics", label: "Analytics", icon: "◔" },
   { href: "/dashboard/question-bank", label: "Question Bank", icon: "▦" },
   { href: "/dashboard/review", label: "Review Queue", icon: "↻" },
   { href: "/dashboard/saved", label: "Saved", icon: "★" },
   { href: "/dashboard/vocab", label: "Vocab", icon: "Aa" },
-  { href: "/dashboard/leaderboard", label: "Progress", icon: "🏆" },
+  { href: "/dashboard/leaderboard", label: "Leaderboard", icon: "🏆" },
   { href: "/dashboard/settings", label: "Settings", icon: "⚙" },
 ];
 
 const quick = [
-  { href: "/dashboard/session", label: "Study Session", icon: "⚡" },
   { href: "/dashboard/test", label: "Practice Test", icon: "▣" },
 ];
 

@@ -4,6 +4,8 @@ import { request as httpsRequest } from "node:https";
 /** How long a single model call may take before we fall back to the corpus. */
 const DEFAULT_TIMEOUT_MS = 60_000;
 
+export type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
+
 type ProviderResponse = {
   ok: boolean;
   status: number;
@@ -56,19 +58,23 @@ function postJsonIpv4(url: string, body: string, key: string, timeoutMs: number)
 }
 
 /**
- * OpenAI-compatible chat completion helper. Returns "" when no API key is set.
+ * OpenAI-compatible chat completion helper. Returns "" when no API key is set
+ * or the provider is unavailable — callers degrade to their local fallback.
+ *
+ * Takes a full message list so the tutor can hold a system prompt and a real
+ * conversation; a single prompt goes in as one user message.
  *
  * The call is capped by an abort timeout (override with `SAT_AI_TIMEOUT_MS`):
  * it runs inside a server render — the study plan, the tutor, the lessons — and
  * a provider that stalls must degrade to the offline corpus instead of hanging
  * the page.
  */
-export async function chatCompletion(
-  prompt: string,
-  opts: { json?: boolean; temperature?: number; model?: string | null } = {}
+export async function chat(
+  messages: ChatMessage[],
+  opts: { json?: boolean; temperature?: number; model?: string | null; maxTokens?: number } = {}
 ): Promise<string> {
   const key = process.env.SAT_AI_API_KEY;
-  if (!key) return "";
+  if (!key || messages.length === 0) return "";
   const base = (process.env.SAT_AI_BASE_URL || "https://api.openai.com/v1").replace(/\/$/, "");
   const allowed = availableModels();
   const model = opts.model && allowed.includes(opts.model) ? opts.model : allowed[0];
@@ -83,12 +89,19 @@ export async function chatCompletion(
     const body = JSON.stringify({
       model,
       temperature: opts.temperature ?? 0.4,
-      max_tokens: 2048,
+      max_tokens: opts.maxTokens ?? 2048,
       ...(model.toLowerCase().startsWith("glm-5.3")
         ? { thinking: { type: "enabled" }, reasoning_effort: "low" }
         : {}),
+      // The DeepSeek models bill their reasoning tokens like any other, and a
+      // tutoring answer does not need them: the same reply cost 15 tokens instead
+      // of 55 on a trivial prompt. Guarded by model name so no other provider is
+      // ever sent a field it does not know.
+      ...(model.toLowerCase().includes("deepseek")
+        ? { thinking: { type: "disabled" } }
+        : {}),
       ...(opts.json ? { response_format: { type: "json_object" } } : {}),
-      messages: [{ role: "user", content: prompt }],
+      messages,
     });
     let res: ProviderResponse;
     try {
@@ -128,4 +141,12 @@ export async function chatCompletion(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/** Single-prompt convenience wrapper around {@link chat}. */
+export async function chatCompletion(
+  prompt: string,
+  opts: { json?: boolean; temperature?: number; model?: string | null; maxTokens?: number } = {}
+): Promise<string> {
+  return chat([{ role: "user", content: prompt }], opts);
 }

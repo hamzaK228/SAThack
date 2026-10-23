@@ -4,13 +4,14 @@ import { useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { ArrowLeft, PanelLeftOpen } from "lucide-react";
 import Sidebar from "./Sidebar";
+import StatsRefresher from "./StatsRefresher";
 
 export default function DashboardShell({ email, isAdmin, children, rail }: { email: string; isAdmin: boolean; children: ReactNode; rail: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [reopened, setReopened] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
-  const focusedExam = /^\/dashboard\/test\/[^/]+$/.test(pathname);
+  const focusedExam = /^\/dashboard\/test\/(?!review\b)[^/]+$/.test(pathname);
   function back() {
     if (window.history.length > 1) router.back();
     else router.push(pathname === "/dashboard" ? "/" : "/dashboard");
@@ -19,11 +20,14 @@ export default function DashboardShell({ email, isAdmin, children, rail }: { ema
 
   return (
     <div className={`dash-layout${collapsed ? " sidebar-collapsed" : ""}`}>
+      <StatsRefresher />
       {!collapsed && <Sidebar email={email} isAdmin={isAdmin} initialOpen={reopened} onClose={() => setCollapsed(true)} />}
       <main className="dash-main">
         <div className="dash-toolbar">
           {collapsed && <button className="dash-tool" onClick={() => { setReopened(true); setCollapsed(false); }} title="Open sidebar" aria-label="Open sidebar"><PanelLeftOpen size={20} /></button>}
-          <button className="dash-tool" onClick={back} title="Back" aria-label="Back"><ArrowLeft size={20} /><span>Back</span></button>
+          {pathname !== "/dashboard" && (
+            <button className="dash-tool" onClick={back} title="Back" aria-label="Back"><ArrowLeft size={20} /><span>Back</span></button>
+          )}
         </div>
         <div className="dash-route-motion" key={pathname}>{children}</div>
       </main>
