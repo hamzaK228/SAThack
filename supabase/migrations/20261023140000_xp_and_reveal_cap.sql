@@ -38,6 +38,13 @@ begin
     raise exception 'Authentication required';
   end if;
 
+  if not exists (
+    select 1 from public.questions q
+    where q.id = p_question_id and q.usable
+  ) then
+    return;
+  end if;
+
   -- Admins need full rows for content QA and are not budgeted.
   if public.is_admin() then
     return query
