@@ -20,6 +20,8 @@ The ten native practice forms are stored in `practice_forms` and reference the v
 
 RLS is the boundary: a signed-in student sees the curated bank plus their own personal rows; only the owner can insert/update/delete a personal word. The “All words” tab filters `owner_id is null`, while saved/due/list views can include personal words. Deleting a personal word cascades its list memberships and spaced-repetition progress. Apply this migration **with** the matching app deploy.
 
+The personal-word form reuses `draftVocabSuggestion` for **Draft with AI**; it consumes the normal daily AI quota and the 20-second provider cap. Opening a list renders “Words in this list” from the same paginated word query, then the flashcard deck. The folder-card click is a navigation; buttons/links inside it keep their own behaviour.
+
 ## Verify and deploy
 
 ```sh

@@ -7,6 +7,8 @@ Deeper technical notes live in `DEPLOYMENT.md` and in the code comments.
 
 ### Vocabulary
 - **Personal words.** A list can now hold words that are not in the curated bank. Add the word, its meaning, an optional example and tags; it appears in the list immediately and works with the same flashcards and spaced repetition. *See:* `/dashboard/vocab` → My lists → any list → "Add word".
+- **Draft with AI.** The Add word form has the same AI helper as “Suggest a word”: type the word, choose Draft with AI, then review/edit the meaning, example and tags before adding. It uses the normal daily AI quota. *See:* any list → "Add word".
+- **Open a folder and see its words.** Tapping the folder card opens it; the page shows a “Words in this list” table above the flashcards, with each word, meaning and a My word badge for personal entries. *See:* `/dashboard/vocab` → My lists → tap a card.
 - **Edit or remove.** Personal words can be edited or deleted from the list manager; removing one from a list keeps the word for your other lists. *See:* any list → "Your words".
 - **List preview customization.** Change a list’s name, note, emoji and accent colour; the card updates in the My lists grid. *See:* `/dashboard/vocab` → My lists → pencil on a card.
 - **Duplicate handling.** If the word already exists in the curated bank (or in your personal words), it is added to the list instead of creating a copy. The curated “All words” deck stays curated.
