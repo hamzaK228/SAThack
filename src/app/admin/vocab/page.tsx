@@ -25,10 +25,14 @@ export default async function AdminVocabPage({
   const filter = safeSearch
     ? `word.ilike.%${safeSearch}%,definition.ilike.%${safeSearch}%`
     : undefined;
-  let countQuery = supabase.from("vocab_words").select("id", { count: "exact", head: true });
+  let countQuery = supabase
+    .from("vocab_words")
+    .select("id", { count: "exact", head: true })
+    .is("owner_id", null);
   let listQuery = supabase
     .from("vocab_words")
     .select("id, word, definition, tags")
+    .is("owner_id", null)
     .order("word");
   if (filter) {
     countQuery = countQuery.or(filter);

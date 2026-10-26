@@ -10,9 +10,15 @@ Use server environment settings or an ignored `.env.local`; never commit credent
 - `NEXT_PUBLIC_OAUTH_PROVIDERS`: comma-separated social providers whose buttons go live on `/auth` (e.g. `google,github`). Only list a provider once Supabase → Authentication → Providers holds a real client id + secret and `https://arpwvfphzryaaxrvegju.supabase.co/auth/v1/callback` is registered in that provider's console — a provider that is merely enabled in Supabase still carries placeholder credentials and would dead-end. Unlisted providers render dimmed; names the UI does not offer (Apple and Facebook were removed) are ignored. `NEXT_PUBLIC_*` values are inlined at build time, so a change needs a redeploy.
 - `SAT_AI_API_KEY`, `SAT_AI_MODEL`, `SAT_AI_ALLOWED_MODELS`: optional configured AI provider access and comma-separated permitted models. Without a provider key the existing book-retrieval fallback remains available.
 
-In Supabase Auth, configure the production site URL and allow `/auth/callback` recovery/signup redirects. Enable leaked-password protection. Database migrations in `migrations/` were applied to project `arpwvfphzryaaxrvegju`; apply them in dependency order to any new environment: assessment-hardening, platform-hardening, account-deletion, progress-summary, vocab-policy-cleanup, native-practice-forms.
+In Supabase Auth, configure the production site URL and allow `/auth/callback` recovery/signup redirects. Enable leaked-password protection. Database migrations in `migrations/` were applied to project `arpwvfphzryaaxrvegju`; apply them in dependency order to any new environment: assessment-hardening, platform-hardening, account-deletion, progress-summary, vocab-policy-cleanup, native-practice-forms, vocab-lists (`2026-10-02`), custom-vocab-words (`2026-10-26`).
 
 The ten native practice forms are stored in `practice_forms` and reference the verified question bank. No local PDF directory or object-storage upload is required. The form migration creates stable, non-overlapping question pools and both easier and harder Module 2 routes.
+
+### Personal vocabulary and list previews
+
+`migrations/2026-10-26-custom-vocab-words.sql` adds `vocab_words.owner_id` (null = curated bank, set = a student's personal word), scopes the unique index per owner, and adds `description` / `emoji` / `color` to `vocab_lists`.
+
+RLS is the boundary: a signed-in student sees the curated bank plus their own personal rows; only the owner can insert/update/delete a personal word. The “All words” tab filters `owner_id is null`, while saved/due/list views can include personal words. Deleting a personal word cascades its list memberships and spaced-repetition progress. Apply this migration **with** the matching app deploy.
 
 ## Verify and deploy
 

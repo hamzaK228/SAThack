@@ -3,6 +3,14 @@
 Plain-language list of user-facing changes, newest first. Each entry says how to see it.
 Deeper technical notes live in `DEPLOYMENT.md` and in the code comments.
 
+## 2026-10-26
+
+### Vocabulary
+- **Personal words.** A list can now hold words that are not in the curated bank. Add the word, its meaning, an optional example and tags; it appears in the list immediately and works with the same flashcards and spaced repetition. *See:* `/dashboard/vocab` → My lists → any list → "Add word".
+- **Edit or remove.** Personal words can be edited or deleted from the list manager; removing one from a list keeps the word for your other lists. *See:* any list → "Your words".
+- **List preview customization.** Change a list’s name, note, emoji and accent colour; the card updates in the My lists grid. *See:* `/dashboard/vocab` → My lists → pencil on a card.
+- **Duplicate handling.** If the word already exists in the curated bank (or in your personal words), it is added to the list instead of creating a copy. The curated “All words” deck stays curated.
+
 ## 2026-10-23
 
 ### Practice and review

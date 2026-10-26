@@ -494,10 +494,55 @@ function normalizeListName(value: string): string {
     .slice(0, 60);
 }
 
-export async function createVocabList(nameValue: string): Promise<{
+const VOCAB_LIST_COLORS = new Set(["lime", "sky", "rose", "amber", "violet", "teal"]);
+
+type VocabListFields = {
+  id: string;
+  name: string;
+  description: string;
+  emoji: string;
+  color: string;
+};
+
+function cleanVocabText(value: string, max: number): string {
+  return value
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .trim()
+    .replace(/\s+/g, " ")
+    .slice(0, max);
+}
+
+function normalizeEmoji(value: string | undefined): string {
+  const emoji = (value ?? "").replace(/[\u0000-\u001f\u007f]/g, "").trim().slice(0, 8);
+  return emoji || "📁";
+}
+
+function normalizeListColor(value: string | undefined): string {
+  const color = (value ?? "").trim().toLowerCase();
+  return VOCAB_LIST_COLORS.has(color) ? color : "lime";
+}
+
+function normalizeTags(value: string): string[] {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value.split(",")) {
+    const tag = cleanVocabText(raw, 30);
+    const key = tag.toLowerCase();
+    if (!tag || seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+    if (tags.length >= 8) break;
+  }
+  return tags;
+}
+
+export async function createVocabList(
+  nameValue: string,
+  options?: { emoji?: string; color?: string }
+): Promise<{
   ok: boolean;
   error?: string;
-  list?: { id: string; name: string };
+  list?: VocabListFields;
 }> {
   const name = normalizeListName(nameValue);
   if (!name) return { ok: false, error: "Give your list a name (1–60 characters)." };
@@ -516,35 +561,64 @@ export async function createVocabList(nameValue: string): Promise<{
 
   const { data, error } = await supabase
     .from("vocab_lists")
-    .insert({ user_id: user.id, name })
-    .select("id, name")
+    .insert({
+      user_id: user.id,
+      name,
+      emoji: normalizeEmoji(options?.emoji),
+      color: normalizeListColor(options?.color),
+    })
+    .select("id, name, description, emoji, color")
     .single();
   if (error?.code === "23505") return { ok: false, error: `You already have a list called “${name}”.` };
   if (error || !data) return { ok: false, error: "Could not create the list — the database migration may not be applied yet." };
 
   revalidatePath("/dashboard/vocab");
-  return { ok: true, list: { id: data.id as string, name: data.name as string } };
+  return { ok: true, list: data as VocabListFields };
 }
 
-export async function renameVocabList(list_id: string, nameValue: string): Promise<{ ok: boolean; error?: string; name?: string }> {
+/** Edit the preview card: name, note, icon and accent colour in one call. */
+export async function updateVocabList(
+  list_id: string,
+  patch: { name?: string; description?: string; emoji?: string; color?: string }
+): Promise<{ ok: boolean; error?: string; list?: VocabListFields }> {
   if (!UUID_RE.test(list_id)) return { ok: false, error: "That list no longer exists." };
-  const name = normalizeListName(nameValue);
-  if (!name) return { ok: false, error: "Give your list a name (1–60 characters)." };
+  const update: Record<string, string> = {};
+
+  if (patch.name !== undefined) {
+    const name = normalizeListName(patch.name);
+    if (!name) return { ok: false, error: "Give your list a name (1–60 characters)." };
+    update.name = name;
+  }
+  if (patch.description !== undefined) update.description = cleanVocabText(patch.description, 160);
+  if (patch.emoji !== undefined) update.emoji = normalizeEmoji(patch.emoji);
+  if (patch.color !== undefined) {
+    const color = (patch.color ?? "").trim().toLowerCase();
+    if (!VOCAB_LIST_COLORS.has(color)) return { ok: false, error: "Choose one of the preview colours." };
+    update.color = color;
+  }
+  if (!Object.keys(update).length) return { ok: false, error: "Nothing to change." };
+
   const supabase = await createClient();
   const user = await getCurrentUser();
   if (!user) redirect("/auth");
 
   const { data, error } = await supabase
     .from("vocab_lists")
-    .update({ name })
+    .update(update)
     .eq("id", list_id)
-    .select("id, name")
+    .eq("user_id", user.id)
+    .select("id, name, description, emoji, color")
     .maybeSingle();
-  if (error?.code === "23505") return { ok: false, error: `You already have a list called “${name}”.` };
-  if (error || !data) return { ok: false, error: "Could not rename the list." };
+  if (error?.code === "23505") return { ok: false, error: `You already have a list called “${update.name ?? ""}”.` };
+  if (error || !data) return { ok: false, error: "Could not update the list preview." };
 
   revalidatePath("/dashboard/vocab");
-  return { ok: true, name: data.name as string };
+  return { ok: true, list: data as VocabListFields };
+}
+
+export async function renameVocabList(list_id: string, nameValue: string): Promise<{ ok: boolean; error?: string; name?: string }> {
+  const result = await updateVocabList(list_id, { name: nameValue });
+  return { ok: result.ok, error: result.error, name: result.list?.name };
 }
 
 export async function deleteVocabList(list_id: string): Promise<{ ok: boolean; error?: string }> {
@@ -588,6 +662,174 @@ export async function toggleWordInList(word_id: string, list_id: string): Promis
   const { error } = await supabase.from("vocab_list_items").insert({ list_id, word_id });
   if (error) return { ok: false, error: "Could not update the list." };
   return { ok: true, inList: true };
+}
+
+/* ---------------------------------------------------------------------------
+ * Personal vocab words — ones the curated bank does not contain.
+ * A personal row is a vocab_words row with owner_id = the student. RLS hides
+ * it from everyone else, and the unique index is per owner.
+ * ------------------------------------------------------------------------- */
+
+const CUSTOM_WORD_MAX = 60;
+const CUSTOM_DEFINITION_MAX = 500;
+const CUSTOM_EXAMPLE_MAX = 500;
+
+function normalizeCustomWord(value: string): string {
+  return cleanVocabText(value, CUSTOM_WORD_MAX);
+}
+
+function likePattern(value: string): string {
+  return value.replace(/[\\%_]/g, "\\$&");
+}
+
+export async function createVocabWord(input: {
+  list_id: string;
+  word: string;
+  definition: string;
+  example?: string;
+  tags?: string;
+}): Promise<{ ok: boolean; error?: string; wordId?: string; word?: string; existing?: boolean }> {
+  if (!UUID_RE.test(input.list_id)) return { ok: false, error: "That list no longer exists." };
+  const word = normalizeCustomWord(input.word);
+  const definition = cleanVocabText(input.definition, CUSTOM_DEFINITION_MAX);
+  const example = cleanVocabText(input.example ?? "", CUSTOM_EXAMPLE_MAX);
+  if (word.length < 1) return { ok: false, error: "Add the word." };
+  if (definition.length < 1) return { ok: false, error: "Add a short definition so the card is useful." };
+
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { data: list } = await supabase
+    .from("vocab_lists")
+    .select("id")
+    .eq("id", input.list_id)
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (!list) return { ok: false, error: "That list no longer belongs to you." };
+
+  const pattern = likePattern(word);
+
+  async function attach(wordId: string, existingWord: string, existing: boolean) {
+    const { error } = await supabase.from("vocab_list_items").upsert(
+      { list_id: input.list_id, word_id: wordId },
+      { onConflict: "list_id,word_id", ignoreDuplicates: true }
+    );
+    if (error) return { ok: false, error: "Could not add the word to this list." };
+    revalidatePath("/dashboard/vocab");
+    return { ok: true, wordId, word: existingWord, existing };
+  }
+
+  // A curated word with the same spelling is already available; reuse it.
+  const { data: bankWord } = await supabase
+    .from("vocab_words")
+    .select("id, word")
+    .is("owner_id", null)
+    .ilike("word", pattern)
+    .maybeSingle();
+  if (bankWord) return attach(bankWord.id as string, bankWord.word as string, true);
+
+  // Or this student already made the same personal word.
+  const { data: ownWord } = await supabase
+    .from("vocab_words")
+    .select("id, word")
+    .eq("owner_id", user.id)
+    .ilike("word", pattern)
+    .maybeSingle();
+  if (ownWord) return attach(ownWord.id as string, ownWord.word as string, true);
+
+  const { data: created, error } = await supabase
+    .from("vocab_words")
+    .insert({
+      owner_id: user.id,
+      word,
+      definition,
+      example_sentence: example || null,
+      tags: normalizeTags(input.tags ?? ""),
+    })
+    .select("id, word")
+    .single();
+
+  if (error?.code === "23505") {
+    const { data: raced } = await supabase
+      .from("vocab_words")
+      .select("id, word")
+      .eq("owner_id", user.id)
+      .ilike("word", pattern)
+      .maybeSingle();
+    if (raced) return attach(raced.id as string, raced.word as string, true);
+  }
+  if (error || !created) return { ok: false, error: "Could not save your word. Try a different spelling." };
+
+  const linked = await attach(created.id as string, created.word as string, false);
+  if (!linked.ok) {
+    // Do not leave an orphan personal word if membership failed.
+    await supabase.from("vocab_words").delete().eq("id", created.id).eq("owner_id", user.id);
+  }
+  return linked;
+}
+
+export async function updateCustomVocabWord(input: {
+  word_id: string;
+  word: string;
+  definition: string;
+  example?: string;
+  tags?: string;
+}): Promise<{ ok: boolean; error?: string; word?: string }> {
+  if (!UUID_RE.test(input.word_id)) return { ok: false, error: "That word no longer exists." };
+  const word = normalizeCustomWord(input.word);
+  const definition = cleanVocabText(input.definition, CUSTOM_DEFINITION_MAX);
+  const example = cleanVocabText(input.example ?? "", CUSTOM_EXAMPLE_MAX);
+  if (word.length < 1) return { ok: false, error: "Add the word." };
+  if (definition.length < 1) return { ok: false, error: "Add a short definition." };
+
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { data: bankWord } = await supabase
+    .from("vocab_words")
+    .select("id")
+    .is("owner_id", null)
+    .ilike("word", likePattern(word))
+    .neq("id", input.word_id)
+    .maybeSingle();
+  if (bankWord) return { ok: false, error: "That word is already in the general bank. Remove this personal one instead." };
+
+  const { data, error } = await supabase
+    .from("vocab_words")
+    .update({
+      word,
+      definition,
+      example_sentence: example || null,
+      tags: normalizeTags(input.tags ?? ""),
+    })
+    .eq("id", input.word_id)
+    .eq("owner_id", user.id)
+    .select("id, word")
+    .maybeSingle();
+  if (error?.code === "23505") return { ok: false, error: "You already have a personal word with that spelling." };
+  if (error || !data) return { ok: false, error: "Could not update this personal word." };
+
+  revalidatePath("/dashboard/vocab");
+  return { ok: true, word: data.word as string };
+}
+
+export async function deleteCustomVocabWord(word_id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!UUID_RE.test(word_id)) return { ok: false, error: "That word no longer exists." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { error } = await supabase
+    .from("vocab_words")
+    .delete()
+    .eq("id", word_id)
+    .eq("owner_id", user.id);
+  if (error) return { ok: false, error: "Could not delete this personal word." };
+
+  revalidatePath("/dashboard/vocab");
+  return { ok: true };
 }
 
 

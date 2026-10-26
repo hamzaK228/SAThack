@@ -5,6 +5,7 @@ import VocabCards, { type VocabWord } from "@/components/dashboard/VocabCards";
 import { cleanExample, isDue, type VocabProgress } from "@/lib/vocab";
 import VocabContribution from "@/components/dashboard/VocabContribution";
 import VocabLists, { type VocabListSummary } from "@/components/dashboard/VocabLists";
+import CustomWordManager, { type CustomVocabWord } from "@/components/dashboard/CustomWordManager";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ function href(params: { q: string; view: View; page: number; list?: string | nul
 export default async function VocabPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; view?: string; page?: string; list?: string }>;
+  searchParams: Promise<{ q?: string; view?: string; page?: string; list?: string; add?: string }>;
 }) {
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -75,18 +76,26 @@ export default async function VocabPage({
   const dueIds = progress.filter((p) => isDue(p)).map((p) => p.word_id);
   const learned = progress.filter((p) => p.times_seen > 0).length;
 
+  // The curated bank only; personal rows belong to their lists, not "All words".
   const { count: totalWords } = await supabase
     .from("vocab_words")
-    .select("id", { count: "exact", head: true });
+    .select("id", { count: "exact", head: true })
+    .is("owner_id", null);
 
   // --- custom lists ("folders") --------------------------------------------
   // RLS scopes every read to this user; the `list` param is only a selector.
   const { data: listRows } = await supabase
     .from("vocab_lists")
-    .select("id, name")
+    .select("id, name, description, emoji, color")
     .eq("user_id", userId)
     .order("name");
-  const lists = (listRows ?? []) as { id: string; name: string }[];
+  const lists = (listRows ?? []) as {
+    id: string;
+    name: string;
+    description: string;
+    emoji: string;
+    color: string;
+  }[];
   const studyingList =
     view === "lists" && sp.list ? lists.find((l) => l.id === sp.list) ?? null : null;
 
@@ -115,6 +124,22 @@ export default async function VocabPage({
     ? items.filter((item) => item.list_id === studyingList.id).map((item) => item.word_id)
     : [];
 
+  // Personal words are rows with owner_id = this student. Show them in the list
+  // manager (not only on the current flashcard page) so editing/deleting is easy.
+  const customWords: CustomVocabWord[] = [];
+  if (studyingList && listWordIds.length) {
+    for (let from = 0; from < listWordIds.length; from += 200) {
+      const { data } = await supabase
+        .from("vocab_words")
+        .select("id, word, definition, example_sentence, tags")
+        .eq("owner_id", userId)
+        .in("id", listWordIds.slice(from, from + 200))
+        .order("word");
+      customWords.push(...((data ?? []) as CustomVocabWord[]));
+    }
+    customWords.sort((a, b) => a.word.localeCompare(b.word));
+  }
+
   // --- the word list -------------------------------------------------------
   // Paginated so all 1,915 words stay reachable (PostgREST caps a page at 1000).
   const filterIds =
@@ -138,8 +163,9 @@ export default async function VocabPage({
   if (showDeck && (!filterIds || filterIds.length > 0)) {
     let query = supabase
       .from("vocab_words")
-      .select("id, word, definition, example_sentence, context_sentence, tags", { count: "exact" })
+      .select("id, word, definition, example_sentence, context_sentence, tags, owner_id", { count: "exact" })
       .order("word");
+    if (view === "all") query = query.is("owner_id", null);
     if (q) query = query.ilike("word", `%${q}%`);
     if (filterIds) query = query.in("id", filterIds);
 
@@ -218,17 +244,33 @@ export default async function VocabPage({
       ) : (
         <>
           {studyingList && (
-            <div className="vocab-list-head">
-              <Link className="btn btn-ghost" href={href({ q: "", view: "lists", page: 1 })}>
-                ← All lists
-              </Link>
-              <span className="vocab-list-head-title">
-                📁 {studyingList.name}
-                <span className="vocab-list-head-n">
-                  {listWordIds.length} {listWordIds.length === 1 ? "word" : "words"}
-                </span>
-              </span>
-            </div>
+            <>
+              <div className={`vocab-list-head vocab-list-color-${studyingList.color}`}>
+                <Link className="btn btn-ghost" href={href({ q: "", view: "lists", page: 1 })}>
+                  ← All lists
+                </Link>
+                <div className="vocab-list-head-copy">
+                  <span className="vocab-list-head-title">
+                    <span className="vocab-list-head-emoji" aria-hidden="true">
+                      {studyingList.emoji || "📁"}
+                    </span>
+                    {studyingList.name}
+                    <span className="vocab-list-head-n">
+                      {listWordIds.length} {listWordIds.length === 1 ? "word" : "words"}
+                    </span>
+                  </span>
+                  {studyingList.description && (
+                    <p className="vocab-list-head-desc">{studyingList.description}</p>
+                  )}
+                </div>
+              </div>
+
+              <CustomWordManager
+                listId={studyingList.id}
+                words={customWords}
+                defaultOpen={sp.add === "1"}
+              />
+            </>
           )}
 
           {words.length === 0 ? (
@@ -247,9 +289,9 @@ export default async function VocabPage({
                   </p>
                 ) : (
                   <p>
-                    This list is empty. Browse{" "}
+                    This list is empty. Add a personal word above, or browse{" "}
                     <Link href={href({ q: "", view: "all", page: 1 })}>All words</Link> and tap{" "}
-                    <strong>＋ List</strong> on a card to add words.
+                    <strong>＋ List</strong> on a card.
                   </p>
                 )
               ) : (

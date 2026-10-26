@@ -27,7 +27,7 @@ export default async function AdminPage() {
     contentSetupResult,
   ] = await Promise.all([
     supabase.from("questions").select("id", { count: "exact", head: true }),
-    supabase.from("vocab_words").select("id", { count: "exact", head: true }),
+    supabase.from("vocab_words").select("id", { count: "exact", head: true }).is("owner_id", null),
     supabase.from("practice_test_catalog").select("id", { count: "exact", head: true }),
     supabase.from("profiles").select("id", { count: "exact", head: true }),
     supabase.from("profiles").select("id,username,full_name,role,current_score,target_score,community_suspended_until").order("created_at", { ascending: false }).limit(40),
@@ -37,7 +37,7 @@ export default async function AdminPage() {
     supabase.from("vocab_suggestions").select("id,word,definition,example_sentence,ai_assisted,created_at").eq("status", "pending").order("created_at", { ascending: false }).limit(30),
     supabase.from("admin_audit_logs").select("id,action,entity_type,entity_id,created_at").order("created_at", { ascending: false }).limit(40),
     supabase.from("questions").select("id,question_text,domain,skill,difficulty").limit(8),
-    supabase.from("vocab_words").select("id,word,definition,tags").order("word").limit(8),
+    supabase.from("vocab_words").select("id,word,definition,tags").is("owner_id", null).order("word").limit(8),
     supabase.from("practice_test_catalog").select("id,title,year,published").order("year", { ascending: false }).limit(8),
     supabase.rpc("admin_content_setup_ready"),
   ]);

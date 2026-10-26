@@ -13,6 +13,8 @@ export type VocabWord = {
   example_sentence: string | null;
   context_sentence: string | null;
   tags: string[];
+  /** Set for a student's personal word; null for the curated bank. */
+  owner_id: string | null;
 };
 
 type ProgressEntry = { mastery: number; times_seen: number };
@@ -232,7 +234,10 @@ export default function VocabCards({
       >
         <div className="vocab-inner">
           <div className="vocab-face vocab-front">
-            <span className="vocab-face-kicker">{level > 0 ? masteryLabel(level) : "SAT word"}</span>
+            <span className="vocab-face-kicker">
+              {level > 0 ? masteryLabel(level) : "SAT word"}
+              {w.owner_id && <span className="vocab-custom-badge">My word</span>}
+            </span>
             {cloze ? (
               <>
                 <span className="vocab-cloze">{cloze}</span>
