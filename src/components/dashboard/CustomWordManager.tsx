@@ -2,10 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Pencil, Plus, Sparkles, Trash2, X } from "lucide-react";
 import {
   createVocabWord,
   deleteCustomVocabWord,
+  draftVocabSuggestion,
   removeWordFromList,
   updateCustomVocabWord,
 } from "@/app/dashboard/actions";
@@ -34,6 +35,7 @@ export default function CustomWordManager({
   const [open, setOpen] = useState(defaultOpen || words.length === 0);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const [aiBusy, setAiBusy] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -46,6 +48,26 @@ export default function CustomWordManager({
     setNotice(message);
     setError("");
     startTransition(() => router.refresh());
+  }
+
+  /** Same drafting helper as “Suggest a word”, but the result lands in this list. */
+  async function draftWithAi() {
+    setError("");
+    setNotice("");
+    if (draft.word.trim().length < 2) return setError("Enter a word first.");
+    setAiBusy(true);
+    const result = await draftVocabSuggestion(draft.word);
+    setAiBusy(false);
+    if (!result.ok || !result.draft) {
+      return setError(result.error ?? "AI could not draft this entry. Write it yourself.");
+    }
+    setDraft((current) => ({
+      ...current,
+      definition: result.draft!.definition.slice(0, 500),
+      example: result.draft!.example.slice(0, 500),
+      tags: result.draft!.tags,
+    }));
+    setNotice("AI draft ready — review and edit it before adding.");
   }
 
   async function add() {
@@ -197,8 +219,19 @@ export default function CustomWordManager({
               placeholder="literature, mood"
             />
           </label>
+          <div className="vocab-custom-ai">
+            <button
+              className="btn btn-ghost"
+              type="button"
+              onClick={() => void draftWithAi()}
+              disabled={aiBusy || busy || draft.word.trim().length < 2}
+            >
+              <Sparkles size={14} /> {aiBusy ? "Drafting…" : "Draft with AI"}
+            </button>
+            <span>Uses the same SAT dictionary helper as “Suggest a word” — review the result.</span>
+          </div>
           <div className="vocab-custom-form-actions">
-            <button className="btn btn-primary" type="submit" disabled={busy}>
+            <button className="btn btn-primary" type="submit" disabled={busy || aiBusy}>
               <Plus size={14} /> {busy ? "Adding…" : "Add word"}
             </button>
             {words.length > 0 && (

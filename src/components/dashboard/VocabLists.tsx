@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Check, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
 import { createVocabList, updateVocabList, deleteVocabList } from "@/app/dashboard/actions";
 
@@ -31,6 +32,7 @@ const EMPTY_EDIT = { name: "", description: "", emoji: "📁", color: "lime" };
  * Rows update optimistically; server actions revalidate the page.
  */
 export default function VocabLists({ lists }: { lists: VocabListSummary[] }) {
+  const router = useRouter();
   const [rows, setRows] = useState<VocabListSummary[]>(lists);
   const [pending, startTransition] = useTransition();
   const [name, setName] = useState("");
@@ -164,7 +166,17 @@ export default function VocabLists({ lists }: { lists: VocabListSummary[] }) {
       ) : (
         <ul className="vocab-list-grid">
           {rows.map((list) => (
-            <li className={`vocab-list-card vocab-list-color-${list.color}`} key={list.id}>
+            <li
+              className={`vocab-list-card vocab-list-color-${list.color}`}
+              key={list.id}
+              onClick={(event) => {
+                // The whole preview card opens the folder; controls keep their
+                // own behaviour. Tapping the padding used to do nothing.
+                const target = event.target as HTMLElement;
+                if (target.closest("a,button,input,select,textarea,label")) return;
+                router.push(`/dashboard/vocab?view=lists&list=${list.id}`);
+              }}
+            >
               {editingId === list.id ? (
                 <form
                   className="vocab-list-editor"
@@ -249,8 +261,12 @@ export default function VocabLists({ lists }: { lists: VocabListSummary[] }) {
                     </span>
                   </Link>
                   <div className="vocab-list-actions">
-                    <Link className="btn btn-primary" href={`/dashboard/vocab?view=lists&list=${list.id}`}>
-                      Study
+                    <Link
+                      className="btn btn-primary"
+                      href={`/dashboard/vocab?view=lists&list=${list.id}`}
+                      title={`Open ${list.name}`}
+                    >
+                      Open
                     </Link>
                     <Link
                       className="btn btn-ghost"

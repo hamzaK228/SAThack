@@ -6485,6 +6485,11 @@ strong {
 .vocab-list-card {
   border-top: 3px solid var(--list-accent, var(--signal));
   background: linear-gradient(180deg, var(--list-tint, transparent), var(--bg-2) 46%);
+  cursor: pointer;
+}
+.vocab-list-card .vocab-list-actions,
+.vocab-list-card .vocab-list-editor {
+  cursor: default;
 }
 .vocab-list-cover {
   display: grid;
@@ -6628,6 +6633,67 @@ strong {
   vertical-align: middle;
 }
 
+.vocab-list-contents {
+  max-width: 560px;
+  margin: 0 auto 0.75rem;
+  padding: 0.8rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-2);
+}
+.vocab-list-contents-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.vocab-list-contents-head strong {
+  font-size: 0.9rem;
+}
+.vocab-list-contents-head span {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+}
+.vocab-list-contents-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.vocab-list-contents-rows li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  background: var(--bg);
+}
+.vocab-list-contents-word {
+  font-weight: 800;
+  font-size: 0.82rem;
+  flex: none;
+  max-width: 34%;
+  overflow-wrap: anywhere;
+}
+.vocab-list-contents-def {
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.vocab-list-contents-rows .vocab-custom-badge {
+  margin-left: auto;
+  flex: none;
+}
+.vocab-list-contents-more {
+  margin: 0.55rem 0 0;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+}
 .vocab-custom {
   max-width: 560px;
   margin: 0 auto 1rem;
@@ -6688,6 +6754,24 @@ strong {
   text-transform: none;
   letter-spacing: 0;
   font-weight: 500;
+}
+.vocab-custom-ai {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+.vocab-custom-ai .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.34rem 0.65rem;
+  font-size: 0.78rem;
+}
+.vocab-custom-ai span {
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--ink-faint);
 }
 .vocab-custom-form-actions,
 .vocab-custom-actions {

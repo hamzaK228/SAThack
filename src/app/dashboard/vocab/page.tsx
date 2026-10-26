@@ -265,6 +265,32 @@ export default async function VocabPage({
                 </div>
               </div>
 
+              {words.length > 0 && (
+                <section className="vocab-list-contents" aria-label="Words in this list">
+                  <div className="vocab-list-contents-head">
+                    <strong>{q ? "Matching words" : "Words in this list"}</strong>
+                    <span>
+                      {count} {count === 1 ? "word" : "words"}
+                      {q ? " match your search" : ""}
+                    </span>
+                  </div>
+                  <ul className="vocab-list-contents-rows">
+                    {words.map((word) => (
+                      <li key={word.id}>
+                        <span className="vocab-list-contents-word">{word.word}</span>
+                        <span className="vocab-list-contents-def">{word.definition}</span>
+                        {word.owner_id && <span className="vocab-custom-badge">My word</span>}
+                      </li>
+                    ))}
+                  </ul>
+                  {count > words.length && (
+                    <p className="vocab-list-contents-more">
+                      Showing {words.length} of {count}. Use the pager below the cards to see more.
+                    </p>
+                  )}
+                </section>
+              )}
+
               <CustomWordManager
                 listId={studyingList.id}
                 words={customWords}
