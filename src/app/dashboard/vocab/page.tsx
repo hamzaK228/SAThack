@@ -211,6 +211,7 @@ export default async function VocabPage({
   ];
 
   const managingLists = view === "lists" && !studyingList;
+  const focusedList = Boolean(studyingList);
   const focusedStudy = Boolean(studyingList && mode === "study");
 
   const pager = (nextMode?: ListMode) =>
@@ -374,7 +375,7 @@ export default async function VocabPage({
 
       {/* Kept below the deck: the flashcard — the point of this page — stays
           above the fold, with the counters as a footer summary. */}
-      {!focusedStudy && (
+      {!focusedList && (
         <div className="vocab-stats">
           {stats.map((s) => (
             <div className="vocab-stat" key={s.label}>
@@ -402,7 +403,7 @@ export default async function VocabPage({
         </form>
       )}
 
-      {!focusedStudy && <VocabContribution />}
+      {!focusedList && <VocabContribution />}
     </div>
   );
 }
