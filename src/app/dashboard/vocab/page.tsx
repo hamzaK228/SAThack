@@ -5,19 +5,27 @@ import VocabCards, { type VocabWord } from "@/components/dashboard/VocabCards";
 import { cleanExample, isDue, type VocabProgress } from "@/lib/vocab";
 import VocabContribution from "@/components/dashboard/VocabContribution";
 import VocabLists, { type VocabListSummary } from "@/components/dashboard/VocabLists";
-import CustomWordManager, { type CustomVocabWord } from "@/components/dashboard/CustomWordManager";
+import ListWordsManager from "@/components/dashboard/ListWordsManager";
 
 export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 60;
 const VIEWS = ["all", "saved", "due", "lists"] as const;
 type View = (typeof VIEWS)[number];
+type ListMode = "words" | "study";
 
-function href(params: { q: string; view: View; page: number; list?: string | null }) {
+function href(params: {
+  q: string;
+  view: View;
+  page: number;
+  list?: string | null;
+  mode?: ListMode;
+}) {
   const sp = new URLSearchParams();
   if (params.q) sp.set("q", params.q);
   if (params.view !== "all") sp.set("view", params.view);
   if (params.list) sp.set("list", params.list);
+  if (params.mode) sp.set("mode", params.mode);
   if (params.page > 1) sp.set("page", String(params.page));
   const qs = sp.toString();
   return `/dashboard/vocab${qs ? `?${qs}` : ""}`;
@@ -26,7 +34,14 @@ function href(params: { q: string; view: View; page: number; list?: string | nul
 export default async function VocabPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; view?: string; page?: string; list?: string; add?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    view?: string;
+    page?: string;
+    list?: string;
+    add?: string;
+    mode?: string;
+  }>;
 }) {
   const supabase = await createClient();
   const user = await getCurrentUser();
@@ -35,6 +50,7 @@ export default async function VocabPage({
   const sp = await searchParams;
   const q = sp.q?.trim() ?? "";
   const view: View = VIEWS.includes(sp.view as View) ? (sp.view as View) : "all";
+  const mode: ListMode = sp.mode === "study" ? "study" : "words";
   const page = Math.max(1, Number.parseInt(sp.page ?? "1", 10) || 1);
 
   // --- progress: saved flags + spaced-repetition schedule ------------------
@@ -124,22 +140,6 @@ export default async function VocabPage({
     ? items.filter((item) => item.list_id === studyingList.id).map((item) => item.word_id)
     : [];
 
-  // Personal words are rows with owner_id = this student. Show them in the list
-  // manager (not only on the current flashcard page) so editing/deleting is easy.
-  const customWords: CustomVocabWord[] = [];
-  if (studyingList && listWordIds.length) {
-    for (let from = 0; from < listWordIds.length; from += 200) {
-      const { data } = await supabase
-        .from("vocab_words")
-        .select("id, word, definition, example_sentence, tags")
-        .eq("owner_id", userId)
-        .in("id", listWordIds.slice(from, from + 200))
-        .order("word");
-      customWords.push(...((data ?? []) as CustomVocabWord[]));
-    }
-    customWords.sort((a, b) => a.word.localeCompare(b.word));
-  }
-
   // --- the word list -------------------------------------------------------
   // Paginated so all 1,915 words stay reachable (PostgREST caps a page at 1000).
   const filterIds =
@@ -211,6 +211,40 @@ export default async function VocabPage({
   ];
 
   const managingLists = view === "lists" && !studyingList;
+  const focusedStudy = Boolean(studyingList && mode === "study");
+
+  const pager = (nextMode?: ListMode) =>
+    pages > 1 ? (
+      <nav className="vocab-pager" aria-label="Vocabulary pages">
+        {safePage > 1 ? (
+          <Link
+            className="btn btn-ghost"
+            href={href({ q, view, page: safePage - 1, list: studyingList?.id, mode: nextMode })}
+          >
+            ← Prev
+          </Link>
+        ) : (
+          <span className="btn btn-ghost disabled" aria-disabled="true">
+            ← Prev
+          </span>
+        )}
+        <span className="vocab-pager-info">
+          Page {safePage} of {pages}
+        </span>
+        {safePage < pages ? (
+          <Link
+            className="btn btn-ghost"
+            href={href({ q, view, page: safePage + 1, list: studyingList?.id, mode: nextMode })}
+          >
+            Next →
+          </Link>
+        ) : (
+          <span className="btn btn-ghost disabled" aria-disabled="true">
+            Next →
+          </span>
+        )}
+      </nav>
+    ) : null;
 
   return (
     <div className="dash-page">
@@ -265,41 +299,37 @@ export default async function VocabPage({
                 </div>
               </div>
 
-              {words.length > 0 && (
-                <section className="vocab-list-contents" aria-label="Words in this list">
-                  <div className="vocab-list-contents-head">
-                    <strong>{q ? "Matching words" : "Words in this list"}</strong>
-                    <span>
-                      {count} {count === 1 ? "word" : "words"}
-                      {q ? " match your search" : ""}
-                    </span>
-                  </div>
-                  <ul className="vocab-list-contents-rows">
-                    {words.map((word) => (
-                      <li key={word.id}>
-                        <span className="vocab-list-contents-word">{word.word}</span>
-                        <span className="vocab-list-contents-def">{word.definition}</span>
-                        {word.owner_id && <span className="vocab-custom-badge">My word</span>}
-                      </li>
-                    ))}
-                  </ul>
-                  {count > words.length && (
-                    <p className="vocab-list-contents-more">
-                      Showing {words.length} of {count}. Use the pager below the cards to see more.
-                    </p>
-                  )}
-                </section>
-              )}
-
-              <CustomWordManager
-                listId={studyingList.id}
-                words={customWords}
-                defaultOpen={sp.add === "1"}
-              />
+              <nav className="vocab-mode-tabs" aria-label="List view">
+                <Link
+                  className={`vocab-mode-tab${mode === "words" ? " active" : ""}`}
+                  href={href({ q, view, page: 1, list: studyingList.id, mode: "words" })}
+                >
+                  Words <span>{listWordIds.length}</span>
+                </Link>
+                <Link
+                  className={`vocab-mode-tab${mode === "study" ? " active" : ""}`}
+                  href={href({ q: "", view, page: 1, list: studyingList.id, mode: "study" })}
+                >
+                  Study
+                </Link>
+              </nav>
             </>
           )}
 
-          {words.length === 0 ? (
+          {studyingList && mode === "words" ? (
+            <>
+              <ListWordsManager
+                key={studyingList.id}
+                listId={studyingList.id}
+                words={words}
+                total={count}
+                q={q}
+                defaultOpen={sp.add === "1"}
+                studyHref={href({ q: "", view, page: 1, list: studyingList.id, mode: "study" })}
+              />
+              {pager("words")}
+            </>
+          ) : words.length === 0 ? (
             <div className="dash-empty">
               {view === "saved" ? (
                 <p>
@@ -308,18 +338,13 @@ export default async function VocabPage({
               ) : view === "due" ? (
                 <p>Nothing due right now. Study a few cards and we&apos;ll schedule them with spaced repetition.</p>
               ) : studyingList ? (
-                q ? (
-                  <p>
-                    No words in this list match “{q}”.{" "}
-                    <Link href={href({ q: "", view, page: 1, list: studyingList.id })}>Clear search</Link>
-                  </p>
-                ) : (
-                  <p>
-                    This list is empty. Add a personal word above, or browse{" "}
-                    <Link href={href({ q: "", view: "all", page: 1 })}>All words</Link> and tap{" "}
-                    <strong>＋ List</strong> on a card.
-                  </p>
-                )
+                <p>
+                  This list is empty.{" "}
+                  <Link href={href({ q: "", view, page: 1, list: studyingList.id, mode: "words" })}>
+                    Go to Words
+                  </Link>{" "}
+                  to add your own.
+                </p>
               ) : (
                 <p>No words found.</p>
               )}
@@ -341,38 +366,7 @@ export default async function VocabPage({
                 lists={lists}
                 memberships={memberships}
               />
-
-              {pages > 1 && (
-                <nav className="vocab-pager" aria-label="Vocabulary pages">
-                  {safePage > 1 ? (
-                    <Link
-                      className="btn btn-ghost"
-                      href={href({ q, view, page: safePage - 1, list: studyingList?.id })}
-                    >
-                      ← Prev
-                    </Link>
-                  ) : (
-                    <span className="btn btn-ghost disabled" aria-disabled="true">
-                      ← Prev
-                    </span>
-                  )}
-                  <span className="vocab-pager-info">
-                    Page {safePage} of {pages}
-                  </span>
-                  {safePage < pages ? (
-                    <Link
-                      className="btn btn-ghost"
-                      href={href({ q, view, page: safePage + 1, list: studyingList?.id })}
-                    >
-                      Next →
-                    </Link>
-                  ) : (
-                    <span className="btn btn-ghost disabled" aria-disabled="true">
-                      Next →
-                    </span>
-                  )}
-                </nav>
-              )}
+              {pager(studyingList ? "study" : undefined)}
             </>
           )}
         </>
@@ -380,17 +374,19 @@ export default async function VocabPage({
 
       {/* Kept below the deck: the flashcard — the point of this page — stays
           above the fold, with the counters as a footer summary. */}
-      <div className="vocab-stats">
-        {stats.map((s) => (
-          <div className="vocab-stat" key={s.label}>
-            <span className="vocab-stat-value">{s.value}</span>
-            <span className="vocab-stat-label">{s.label}</span>
-          </div>
-        ))}
-      </div>
+      {!focusedStudy && (
+        <div className="vocab-stats">
+          {stats.map((s) => (
+            <div className="vocab-stat" key={s.label}>
+              <span className="vocab-stat-value">{s.value}</span>
+              <span className="vocab-stat-label">{s.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Search filters the decks, so it stays out of the list-manager view. */}
-      {!managingLists && (
+      {!managingLists && !focusedStudy && (
         <form className="vocab-search" method="get" action="/dashboard/vocab">
           {view !== "all" && <input type="hidden" name="view" value={view} />}
           {studyingList && <input type="hidden" name="list" value={studyingList.id} />}
@@ -406,7 +402,7 @@ export default async function VocabPage({
         </form>
       )}
 
-      <VocabContribution />
+      {!focusedStudy && <VocabContribution />}
     </div>
   );
 }

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, FolderPlus, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, FolderPlus, Pencil, Trash2, X } from "lucide-react";
 import { createVocabList, updateVocabList, deleteVocabList } from "@/app/dashboard/actions";
 
 export type VocabListSummary = {
@@ -270,10 +270,10 @@ export default function VocabLists({ lists }: { lists: VocabListSummary[] }) {
                     </Link>
                     <Link
                       className="btn btn-ghost"
-                      href={`/dashboard/vocab?view=lists&list=${list.id}&add=1`}
-                      title="Add a personal word"
+                      href={`/dashboard/vocab?view=lists&list=${list.id}&mode=study`}
+                      title={`Study ${list.name}`}
                     >
-                      <Plus size={14} /> Word
+                      Study
                     </Link>
                     <button
                       className="btn btn-ghost"
