@@ -6,7 +6,7 @@ import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import {
   createVocabWord,
   deleteCustomVocabWord,
-  toggleWordInList,
+  removeWordFromList,
   updateCustomVocabWord,
 } from "@/app/dashboard/actions";
 
@@ -106,7 +106,7 @@ export default function CustomWordManager({
 
   async function removeFromList(wordId: string) {
     setBusy(true);
-    const result = await toggleWordInList(wordId, listId);
+    const result = await removeWordFromList(wordId, listId);
     setBusy(false);
     setRemoveConfirm(null);
     if (!result.ok) return setError(result.error ?? "Could not remove the word from this list.");

@@ -11,8 +11,9 @@ export const getProgressSummary = cache(async () => {
       // accuracy follows the same rule the analytics page and the question bank
       // use: every question counts once, with the status of its LATEST attempt
       // (answered wrong then corrected = one solved question, not one correct
-      // and one wrong). XP stays per recorded attempt, to reward the retry.
-      // Rows come newest-first, so a question's first sighting is its latest.
+      // and one wrong). XP uses the same distinct-question counts, so replaying
+      // a question does not mint more XP. Rows come newest-first, so a
+      // question's first sighting is its latest.
       const questions = new Map<string, boolean>();
       const pageSize = 1000;
       for (let from = 0; ; from += pageSize) {

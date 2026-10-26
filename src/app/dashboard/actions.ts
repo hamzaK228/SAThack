@@ -664,6 +664,23 @@ export async function toggleWordInList(word_id: string, list_id: string): Promis
   return { ok: true, inList: true };
 }
 
+/** Remove one membership without ever adding it back (unlike a toggle). */
+export async function removeWordFromList(word_id: string, list_id: string): Promise<{ ok: boolean; error?: string }> {
+  if (!UUID_RE.test(word_id) || !UUID_RE.test(list_id)) return { ok: false, error: "That word or list no longer exists." };
+  const supabase = await createClient();
+  const user = await getCurrentUser();
+  if (!user) redirect("/auth");
+
+  const { error } = await supabase
+    .from("vocab_list_items")
+    .delete()
+    .eq("list_id", list_id)
+    .eq("word_id", word_id);
+  if (error) return { ok: false, error: "Could not remove the word from this list." };
+  revalidatePath("/dashboard/vocab");
+  return { ok: true };
+}
+
 /* ---------------------------------------------------------------------------
  * Personal vocab words — ones the curated bank does not contain.
  * A personal row is a vocab_words row with owner_id = the student. RLS hides
